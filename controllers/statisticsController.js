@@ -1,0 +1,361 @@
+const catchAsync = require('../utils/catchAsync');
+const Order = require('../models/orderModel');
+const User = require('../models/auth/userModel');
+const Delivery = require('../models/auth/deliveryModel');
+const Restaurant = require('../models/auth/restaurantModel');
+const Meal = require('../models/mealModel');
+const Category = require('../models/categoryModel');
+const {
+    createOrderMetricsGroup,
+    createDateMatch,
+    createRestaurantMatch,
+    createDefaultMetrics,
+    toObjectId
+} = require('../models/statisticsModel');
+
+const startOfDay = (date = new Date()) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
+const startOfMonth = (date = new Date()) => new Date(date.getFullYear(), date.getMonth(), 1);
+const addDays = (date, days) => new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
+const addMonths = (date, months) => new Date(date.getFullYear(), date.getMonth() + months, 1);
+
+const getSingleMetrics = async (match, label = null) => {
+    const [result] = await Order.aggregate([
+        { $match: match },
+        { $group: createOrderMetricsGroup() }
+    ]);
+
+    return result
+        ? { label, ...result, _id: undefined }
+        : createDefaultMetrics(label);
+};
+
+const getRestaurantInfo = async (restaurantId, includeInactive = false) => {
+    return Restaurant.findById(restaurantId)
+        .setOptions(includeInactive ? { includeInactive: true } : {})
+        .select('name phone image discount deliveryTime active');
+};
+
+const getRestaurantDailySeries = async (restaurantId, days = 7) => {
+    const today = startOfDay();
+    const startDate = addDays(today, -(days - 1));
+    const restaurantMatch = { restaurantId: toObjectId(restaurantId) };
+
+    const rows = await Order.aggregate([
+        {
+            $match: {
+                ...restaurantMatch,
+                ...createDateMatch(startDate, addDays(today, 1))
+            }
+        },
+        {
+            $group: {
+                _id: {
+                    year: { $year: '$createdAt' },
+                    month: { $month: '$createdAt' },
+                    day: { $dayOfMonth: '$createdAt' }
+                },
+                totalOrders: { $sum: 1 },
+                totalRevenue: { $sum: '$totalPrice' },
+                totalRevenueAfterDiscount: { $sum: '$totalPrice' },
+                totalRevenueBeforeDiscount: { $sum: '$totalPriceBeforeDiscount' }
+            }
+        }
+    ]);
+
+    const mapped = new Map(
+        rows.map((row) => {
+            const key = `${row._id.year}-${String(row._id.month).padStart(2, '0')}-${String(row._id.day).padStart(2, '0')}`;
+            return [key, row];
+        })
+    );
+
+    return Array.from({ length: days }, (_, index) => {
+        const currentDate = addDays(startDate, index);
+        const key = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
+        const row = mapped.get(key);
+
+        return {
+            date: key,
+            totalOrders: row?.totalOrders || 0,
+            totalRevenue: row?.totalRevenue || 0,
+            totalRevenueAfterDiscount: row?.totalRevenueAfterDiscount || 0,
+            totalRevenueBeforeDiscount: row?.totalRevenueBeforeDiscount || 0
+        };
+    });
+};
+
+const getRestaurantMonthlySeries = async (restaurantId, months = 6) => {
+    const thisMonthStart = startOfMonth();
+    const startDate = addMonths(thisMonthStart, -(months - 1));
+
+    const rows = await Order.aggregate([
+        {
+            $match: createRestaurantMatch(restaurantId, startDate, addMonths(thisMonthStart, 1))
+        },
+        {
+            $group: {
+                _id: {
+                    year: { $year: '$createdAt' },
+                    month: { $month: '$createdAt' }
+                },
+                totalOrders: { $sum: 1 },
+                totalRevenue: { $sum: '$totalPrice' },
+                totalRevenueAfterDiscount: { $sum: '$totalPrice' },
+                totalRevenueBeforeDiscount: { $sum: '$totalPriceBeforeDiscount' }
+            }
+        }
+    ]);
+
+    const mapped = new Map(
+        rows.map((row) => {
+            const key = `${row._id.year}-${String(row._id.month).padStart(2, '0')}`;
+            return [key, row];
+        })
+    );
+
+    return Array.from({ length: months }, (_, index) => {
+        const currentDate = addMonths(startDate, index);
+        const key = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+        const row = mapped.get(key);
+
+        return {
+            month: key,
+            totalOrders: row?.totalOrders || 0,
+            totalRevenue: row?.totalRevenue || 0,
+            totalRevenueAfterDiscount: row?.totalRevenueAfterDiscount || 0,
+            totalRevenueBeforeDiscount: row?.totalRevenueBeforeDiscount || 0
+        };
+    });
+};
+
+const getRestaurantOverviewPayload = async (restaurantId, includeInactive = false) => {
+    const today = startOfDay();
+    const monthStart = startOfMonth();
+    const tomorrow = addDays(today, 1);
+    const nextMonth = addMonths(monthStart, 1);
+
+    const [restaurant, allTime, todayStats, monthStats, daily, monthly] = await Promise.all([
+        getRestaurantInfo(restaurantId, includeInactive),
+        getSingleMetrics({ restaurantId: toObjectId(restaurantId) }, 'allTime'),
+        getSingleMetrics(createRestaurantMatch(restaurantId, today, tomorrow), 'today'),
+        getSingleMetrics(createRestaurantMatch(restaurantId, monthStart, nextMonth), 'month'),
+        getRestaurantDailySeries(restaurantId),
+        getRestaurantMonthlySeries(restaurantId)
+    ]);
+
+    return {
+        restaurant,
+        summary: {
+            allTime,
+            today: todayStats,
+            month: monthStats
+        },
+        daily,
+        monthly
+    };
+};
+
+exports.getRestaurantStatistics = catchAsync(async (req, res) => {
+    const payload = await getRestaurantOverviewPayload(req.user.id);
+
+    res.status(200).json({
+        status: 'success',
+        data: payload
+    });
+});
+
+exports.getAdminRestaurantStatistics = catchAsync(async (req, res) => {
+    const payload = await getRestaurantOverviewPayload(req.params.id, true);
+
+    res.status(200).json({
+        status: 'success',
+        data: payload
+    });
+});
+
+exports.getAdminOverviewStatistics = catchAsync(async (req, res) => {
+    const today = startOfDay();
+    const monthStart = startOfMonth();
+    const tomorrow = addDays(today, 1);
+    const nextMonth = addMonths(monthStart, 1);
+
+    const [
+        totalUsers,
+        totalDeliveries,
+        totalRestaurants,
+        totalMeals,
+        totalCategories,
+        allTime,
+        todayStats,
+        monthStats,
+        restaurants
+    ] = await Promise.all([
+        User.countDocuments(),
+        Delivery.countDocuments(),
+        Restaurant.countDocuments(),
+        Meal.countDocuments(),
+        Category.countDocuments(),
+        getSingleMetrics({}, 'allTime'),
+        getSingleMetrics(createDateMatch(today, tomorrow), 'today'),
+        getSingleMetrics(createDateMatch(monthStart, nextMonth), 'month'),
+        Order.aggregate([
+            {
+                $group: {
+                    _id: '$restaurantId',
+                    totalOrders: { $sum: 1 },
+                    totalRevenue: { $sum: '$totalPrice' },
+                    totalRevenueAfterDiscount: { $sum: '$totalPrice' },
+                    totalRevenueBeforeDiscount: { $sum: '$totalPriceBeforeDiscount' }
+                }
+            },
+            { $sort: { totalRevenue: -1, totalOrders: -1 } },
+            { $limit: 10 },
+            {
+                $lookup: {
+                    from: 'restaurants',
+                    localField: '_id',
+                    foreignField: '_id',
+                    as: 'restaurant'
+                }
+            },
+            {
+                $unwind: {
+                    path: '$restaurant',
+                    preserveNullAndEmptyArrays: true
+                }
+            },
+            {
+                $project: {
+                    _id: 0,
+                    restaurantId: '$_id',
+                    restaurantName: '$restaurant.name',
+                    phone: '$restaurant.phone',
+                    totalOrders: 1,
+                    totalRevenue: 1,
+                    totalRevenueAfterDiscount: 1,
+                    totalRevenueBeforeDiscount: 1
+                }
+            }
+        ])
+    ]);
+
+    res.status(200).json({
+        status: 'success',
+        data: {
+            totals: {
+                totalUsers,
+                totalDeliveries,
+                totalRestaurants,
+                totalMeals,
+                totalCategories
+            },
+            orders: {
+                allTime,
+                today: todayStats,
+                month: monthStats
+            },
+            topRestaurants: restaurants
+        }
+    });
+});
+
+exports.getAdminRestaurantsStatistics = catchAsync(async (req, res) => {
+    const today = startOfDay();
+    const monthStart = startOfMonth();
+    const tomorrow = addDays(today, 1);
+    const nextMonth = addMonths(monthStart, 1);
+
+    const restaurants = await Order.aggregate([
+        {
+            $facet: {
+                allTime: [
+                    {
+                        $group: {
+                            _id: '$restaurantId',
+                            totalOrders: { $sum: 1 },
+                            totalRevenue: { $sum: '$totalPrice' },
+                            totalRevenueAfterDiscount: { $sum: '$totalPrice' },
+                            totalRevenueBeforeDiscount: { $sum: '$totalPriceBeforeDiscount' }
+                        }
+                    }
+                ],
+                today: [
+                    { $match: createDateMatch(today, tomorrow) },
+                    {
+                        $group: {
+                            _id: '$restaurantId',
+                            todayOrders: { $sum: 1 },
+                            todayRevenue: { $sum: '$totalPrice' },
+                            todayRevenueAfterDiscount: { $sum: '$totalPrice' },
+                            todayRevenueBeforeDiscount: { $sum: '$totalPriceBeforeDiscount' }
+                        }
+                    }
+                ],
+                month: [
+                    { $match: createDateMatch(monthStart, nextMonth) },
+                    {
+                        $group: {
+                            _id: '$restaurantId',
+                            monthOrders: { $sum: 1 },
+                            monthRevenue: { $sum: '$totalPrice' },
+                            monthRevenueAfterDiscount: { $sum: '$totalPrice' },
+                            monthRevenueBeforeDiscount: { $sum: '$totalPriceBeforeDiscount' }
+                        }
+                    }
+                ]
+            }
+        }
+    ]);
+
+    const [restaurantDocs, ordersData] = await Promise.all([
+        Restaurant.find()
+            .setOptions({ includeInactive: true })
+            .select('name phone image active discount deliveryTime'),
+        Promise.resolve(restaurants[0] || { allTime: [], today: [], month: [] })
+    ]);
+
+    const allTimeMap = new Map(ordersData.allTime.map((row) => [String(row._id), row]));
+    const todayMap = new Map(ordersData.today.map((row) => [String(row._id), row]));
+    const monthMap = new Map(ordersData.month.map((row) => [String(row._id), row]));
+
+    const data = restaurantDocs.map((restaurant) => {
+        const id = String(restaurant._id);
+        const allTime = allTimeMap.get(id) || {};
+        const todayStats = todayMap.get(id) || {};
+        const monthStats = monthMap.get(id) || {};
+
+        return {
+            restaurantId: restaurant._id,
+            name: restaurant.name,
+            phone: restaurant.phone,
+            image: restaurant.image,
+            active: restaurant.active,
+            discount: restaurant.discount,
+            deliveryTime: restaurant.deliveryTime,
+            totalOrders: allTime.totalOrders || 0,
+            totalRevenue: allTime.totalRevenue || 0,
+            totalRevenueAfterDiscount: allTime.totalRevenueAfterDiscount || 0,
+            totalRevenueBeforeDiscount: allTime.totalRevenueBeforeDiscount || 0,
+            todayOrders: todayStats.todayOrders || 0,
+            todayRevenue: todayStats.todayRevenue || 0,
+            todayRevenueAfterDiscount: todayStats.todayRevenueAfterDiscount || 0,
+            todayRevenueBeforeDiscount: todayStats.todayRevenueBeforeDiscount || 0,
+            monthOrders: monthStats.monthOrders || 0,
+            monthRevenue: monthStats.monthRevenue || 0,
+            monthRevenueAfterDiscount: monthStats.monthRevenueAfterDiscount || 0,
+            monthRevenueBeforeDiscount: monthStats.monthRevenueBeforeDiscount || 0
+        };
+    }).sort((a, b) => {
+        if (a.active !== b.active) {
+            return Number(a.active) - Number(b.active);
+        }
+
+        return b.totalRevenue - a.totalRevenue || b.totalOrders - a.totalOrders;
+    });
+
+    res.status(200).json({
+        status: 'success',
+        results: data.length,
+        data
+    });
+});
