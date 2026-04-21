@@ -55,13 +55,31 @@ const allowedOrigins = (process.env.CORS_ORIGINS || '')
     .map(origin => origin.trim())
     .filter(Boolean);
 
-const corsOptions = {
-    origin(origin, callback) {
-        if (!origin) {
-            return callback(null, true);
+const isAllowedOrigin = (origin) => {
+    if (!origin) {
+        return true;
+    }
+
+    return allowedOrigins.some((allowedOrigin) => {
+        if (allowedOrigin === origin) {
+            return true;
         }
 
-        if (allowedOrigins.includes(origin)) {
+        if (!allowedOrigin.includes('*')) {
+            return false;
+        }
+
+        const pattern = allowedOrigin
+            .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+            .replace(/\*/g, '.*');
+
+        return new RegExp(`^${pattern}$`).test(origin);
+    });
+};
+
+const corsOptions = {
+    origin(origin, callback) {
+        if (isAllowedOrigin(origin)) {
             return callback(null, true);
         }
 

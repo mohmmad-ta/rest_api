@@ -190,7 +190,7 @@ exports.changStatus = (id) => async (req, res, next) => {
             deli.delivery.forEach((item) => {
                 sendOrderToUser(item._id.toString(), data, `change-status-to-deli`, {
                     role: "delivery",
-                    persistNotification: false,
+                    persistNotification: true,
                 });
             });
         }
@@ -199,19 +199,19 @@ exports.changStatus = (id) => async (req, res, next) => {
             deli.delivery.forEach((item) => {
                 sendOrderToUser(item._id.toString(), data, `change-status-to-delete-from-deli`, {
                     role: "delivery",
-                    persistNotification: false,
+                    persistNotification: true,
                 });
             });
         }
         sendOrderToUser(data.deliveryId?.id || data.deliveryId?._id || data.deliveryId, data, `change-status-to-deli-forMe-3`, {
             role: "delivery",
-            persistNotification: false,
+            persistNotification: true,
         });
 
     }else if (data.status === "4"){
         sendOrderToUser(data.deliveryId?.id || data.deliveryId?._id || data.deliveryId, data, `change-status-to-deli-forMe-4`, {
             role: "delivery",
-            persistNotification: false,
+            persistNotification: true,
         });
     }
     // Send to restaurant

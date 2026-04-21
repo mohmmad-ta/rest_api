@@ -310,7 +310,7 @@ exports.getAdminRestaurantsStatistics = catchAsync(async (req, res) => {
     const [restaurantDocs, ordersData] = await Promise.all([
         Restaurant.find()
             .setOptions({ includeInactive: true })
-            .select('name phone image active discount deliveryTime'),
+            .select('name phone image active discount deliveryTime createdAt'),
         Promise.resolve(restaurants[0] || { allTime: [], today: [], month: [] })
     ]);
 
@@ -332,6 +332,7 @@ exports.getAdminRestaurantsStatistics = catchAsync(async (req, res) => {
             active: restaurant.active,
             discount: restaurant.discount,
             deliveryTime: restaurant.deliveryTime,
+            createdAt: restaurant.createdAt,
             totalOrders: allTime.totalOrders || 0,
             totalRevenue: allTime.totalRevenue || 0,
             totalRevenueAfterDiscount: allTime.totalRevenueAfterDiscount || 0,

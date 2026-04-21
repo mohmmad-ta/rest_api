@@ -26,6 +26,8 @@ router.get('/restaurant/getOrderStatus/:id', protect(Restaurant), restrictTo('re
 router.patch('/restaurant/changStatus', protect(Restaurant), restrictTo('restaurant'), changStatus('restaurantId'));
 
 // Delivery Controller
+router.get('/delivery/myNotifications', protect(Delivery), restrictTo('delivery'), getMyNotifications('delivery'));
+router.patch('/delivery/myNotifications/:id/read', protect(Delivery), restrictTo('delivery'), markNotificationAsRead('delivery'));
 router.get('/delivery/getOrderStatus/:id', protect(Delivery), restrictTo('delivery'), getOrderStatus('deliveryId'));
 router.patch('/delivery/changStatus', protect(Delivery), restrictTo('delivery'), changStatus('deliveryId'));
 

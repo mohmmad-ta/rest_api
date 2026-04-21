@@ -6,6 +6,7 @@ const Restaurant = require("../../models/auth/restaurantModel");
 const Order = require("../../models/orderModel");
 const Meal = require("../../models/mealModel");
 const Category = require("../../models/categoryModel");
+const AppError = require('../../utils/appError');
 const APIFeatures = require("../../utils/apiFeatures");
 const factory = require('./../handlerFactory');
 
@@ -56,18 +57,60 @@ exports.adminUpdateDelivery = factory.updateOne(Delivery);
 exports.adminDeleteDelivery = factory.deleteOne(Delivery);
 
 // ### === CRUD Restaurant === ###
-exports.adminGetRestaurant = async (req, res, next) => {
-    const user = await Restaurant.findById(req.params.id).populate('delivery').populate('meal')
+exports.adminGetRestaurant = catchAsync(async (req, res, next) => {
+    const user = await Restaurant.findById(req.params.id)
+        .setOptions({ includeInactive: true })
+        .populate('delivery')
+        .populate('meal');
+
+    if (!user) {
+        return next(new AppError('No document found with that ID', 404));
+    }
+
     res.status(200).json({
         status: 'success',
         data: user
     });
-};
+});
 exports.adminGetAllRestaurant = factory.getAll(Restaurant);
 
 // Do NOT update passwords with this!
-exports.adminUpdateRestaurant = factory.updateOne(Restaurant);
-exports.adminDeleteRestaurant = factory.deleteOne(Restaurant);
+exports.adminUpdateRestaurant = catchAsync(async (req, res, next) => {
+    const user = await Restaurant.findOneAndUpdate(
+        { _id: req.params.id },
+        req.body,
+        {
+            new: true,
+            runValidators: true,
+            includeInactive: true,
+        }
+    );
+
+    if (!user) {
+        return next(new AppError('No document found with that ID', 404));
+    }
+
+    res.status(200).json({
+        status: 'success',
+        data: user
+    });
+});
+
+exports.adminDeleteRestaurant = catchAsync(async (req, res, next) => {
+    const user = await Restaurant.findOneAndDelete(
+        { _id: req.params.id },
+        { includeInactive: true }
+    );
+
+    if (!user) {
+        return next(new AppError('No document found with that ID', 404));
+    }
+
+    res.status(204).json({
+        status: 'success',
+        data: null
+    });
+});
 
 // ### === CRUD Orders === ###
 exports.adminGetOrder = factory.getOne(Order);

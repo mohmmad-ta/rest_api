@@ -23,6 +23,23 @@ const ADMIN_LOGIN_OTP_MAX_VERIFY_ATTEMPTS = parseInt(process.env.ADMIN_LOGIN_OTP
 const ADMIN_LOGIN_OTP_MAX_RESENDS = parseInt(process.env.ADMIN_LOGIN_OTP_MAX_RESENDS || "3", 10);
 const ADMIN_LOGIN_OTP_BLOCK_MINUTES = parseInt(process.env.ADMIN_LOGIN_OTP_BLOCK_MINUTES || "30", 10);
 
+const parseBooleanEnv = (value, fallback = false) => {
+    if (typeof value !== 'string') {
+        return fallback;
+    }
+
+    const normalized = value.trim().toLowerCase();
+    if (['true', '1', 'yes', 'on'].includes(normalized)) {
+        return true;
+    }
+
+    if (['false', '0', 'no', 'off'].includes(normalized)) {
+        return false;
+    }
+
+    return fallback;
+};
+
 const getTokenFromRequest = (req) => {
     if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
         return req.headers.authorization.split(' ')[1];
@@ -52,6 +69,12 @@ const normalizeOtpiqPhoneNumber = (phone) => {
 
     return digits;
 };
+
+const normalizeOtpInput = (value) =>
+    String(value || '')
+        .trim()
+        .replace(/[٠-٩]/g, (digit) => String(digit.charCodeAt(0) - 1632))
+        .replace(/[۰-۹]/g, (digit) => String(digit.charCodeAt(0) - 1776));
 
 const generateOtpCode = () => `${Math.floor(100000 + Math.random() * 900000)}`;
 
@@ -335,7 +358,7 @@ const verifySignupOtpForModel = (Model, { activateOnVerify = true, onSuccess } =
             return next(new AppError('رمز التحقق غير صالح أو انتهت صلاحيته.', 400));
         }
 
-        const hashedOtp = hashOtpCode(otp);
+        const hashedOtp = hashOtpCode(normalizeOtpInput(otp));
         if (hashedOtp !== user.signupOtpCode) {
             user.signupOtpVerifyAttempts = Number(user.signupOtpVerifyAttempts || 0) + 1;
 
@@ -451,7 +474,7 @@ const verifyPasswordResetOtpForModel = (Model) =>
             return next(new AppError('رمز إعادة التعيين غير صالح أو انتهت صلاحيته.', 400));
         }
 
-        const hashedOtp = hashOtpCode(otp);
+        const hashedOtp = hashOtpCode(normalizeOtpInput(otp));
         if (hashedOtp !== user.passwordResetOtpCode) {
             user.passwordResetOtpVerifyAttempts = Number(user.passwordResetOtpVerifyAttempts || 0) + 1;
 
@@ -545,7 +568,7 @@ const verifyAdminLoginOtpHandler = catchAsync(async (req, res, next) => {
         return next(new AppError('رمز التحقق غير صالح أو انتهت صلاحيته.', 400));
     }
 
-    if (hashOtpCode(otp) !== user.adminLoginOtpCode) {
+    if (hashOtpCode(normalizeOtpInput(otp)) !== user.adminLoginOtpCode) {
         user.adminLoginOtpVerifyAttempts = Number(user.adminLoginOtpVerifyAttempts || 0) + 1;
 
         if (user.adminLoginOtpVerifyAttempts >= ADMIN_LOGIN_OTP_MAX_VERIFY_ATTEMPTS) {
@@ -592,17 +615,34 @@ const signToken = (id)=>{
     })
 }
 
-// *** jwt token ***
-const createSendToken = (user, statusCode, res) => {
-    const token = signToken(user._id);
+const buildJwtCookieOptions = () => {
+    const secureCookies = parseBooleanEnv(
+        process.env.JWT_COOKIE_SECURE,
+        process.env.NODE_ENV === 'production'
+    );
+    const sameSite = process.env.JWT_COOKIE_SAMESITE ||
+        (secureCookies ? 'none' : 'lax');
     const cookieOptions = {
         expires: new Date(
             Date.now() + process.env.JWT_COOKIE_EXPIRES_IN * 24 * 60 * 60 * 1000
         ),
-        httpOnly: true
+        httpOnly: true,
+        sameSite,
+        secure: secureCookies,
+        path: process.env.JWT_COOKIE_PATH || '/',
     };
-    if (process.env.NODE_ENV === 'production') cookieOptions.secure = true;
 
+    if (process.env.JWT_COOKIE_DOMAIN) {
+        cookieOptions.domain = process.env.JWT_COOKIE_DOMAIN;
+    }
+
+    return cookieOptions;
+};
+
+// *** jwt token ***
+const createSendToken = (user, statusCode, res) => {
+    const token = signToken(user._id);
+    const cookieOptions = buildJwtCookieOptions();
     res.cookie('jwt', token, cookieOptions);
     user.password = undefined;
 
@@ -785,8 +825,13 @@ exports.checkToken = catchAsync(async (req, res, next) => {
 
 // *** To user logout ***
 exports.logout = catchAsync(async (req, res, next)=>{
-    res.cookie('jwt', null);
-    res.cookie('id', null);
+    const cookieOptions = {
+        ...buildJwtCookieOptions(),
+        expires: new Date(0),
+    };
+
+    res.clearCookie('jwt', cookieOptions);
+    res.clearCookie('id', cookieOptions);
     res.status(201).json({
         status: 'success',
     })
