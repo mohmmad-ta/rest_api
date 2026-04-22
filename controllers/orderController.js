@@ -81,9 +81,9 @@ exports.createOrder = catchAsync(async (req, res, next)=>{
     const order = await Order.create({
         userId: req.user.id,
         restaurantId: req.body.restaurantId,
-        deliveryId: req.body.restaurantId,
         item: req.body.item,
         location: req.body.location,
+        antherPhone: req.body.antherPhone,
     });
 
     sendOrderToUser(req.user.id, order, "create-order", {
