@@ -40,15 +40,15 @@ function buildPushPayload(type, order) {
       bodyAr: `تم تحديث حالة الطلب رقم #${orderId}.`,
     },
     'change-status-to-user': {
-      title: orderStatus === '4' ? 'Order delivered' : 'Order updated',
-      titleAr: orderStatus === '4' ? 'تم توصيل الطلب' : 'تم تحديث الطلب',
+      title: orderStatus === '4' ? 'Rate your restaurant' : 'Order updated',
+      titleAr: orderStatus === '4' ? 'قيّم المطعم' : 'تم تحديث الطلب',
       body:
           orderStatus === '4'
-              ? `Your order #${orderId} has been delivered.`
+              ? `Your order #${orderId} has been delivered. Rate your restaurant now.`
               : `Your order #${orderId} is now ${statusLabelEn}.`.trim(),
       bodyAr:
           orderStatus === '4'
-              ? `تم توصيل طلبك رقم #${orderId}.`
+              ? `تم توصيل طلبك رقم #${orderId}. قيّم المطعم الآن.`
               : `حالة طلبك رقم #${orderId} أصبحت ${statusLabelAr}.`,
     },
     'change-status-to-deli': {
@@ -139,13 +139,17 @@ function broadcastOrder(order) {
   });
 }
 
-function sendOrderToUser(userId, order, type, options = {}) {
+function sendRealtimeOrderToUser(userId, order, type) {
   const normalizedUserId = userId?.toString?.() || `${userId || ''}`.trim();
   const ws = userSockets.get(normalizedUserId);
-  console.log(`Sending order to user ${userId}`, order);
+
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: type, data: order }));
   }
+}
+
+function sendNotificationToUser(userId, order, type, options = {}) {
+  const normalizedUserId = userId?.toString?.() || `${userId || ''}`.trim();
 
   Promise.resolve()
       .then(async () => {
@@ -193,5 +197,6 @@ function sendOrderToUser(userId, order, type, options = {}) {
 module.exports = {
   initWebSocket,
   broadcastOrder,
-  sendOrderToUser
+  sendRealtimeOrderToUser,
+  sendNotificationToUser
 };

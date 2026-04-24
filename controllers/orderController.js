@@ -5,7 +5,7 @@ const AppError = require('./../utils/appError');
 const APIFeatures = require('./../utils/apiFeatures');
 const Delivery = require("../models/auth/deliveryModel");
 const Restaurant = require("../models/auth/restaurantModel");
-const {sendOrderToUser, broadcastOrder} = require("./wsController");
+const {sendRealtimeOrderToUser, sendNotificationToUser, broadcastOrder} = require("./wsController");
 const MAX_RESTAURANT_ORDER_RADIUS_KM = 10;
 
 const getStartOfYesterday = () => {
@@ -86,12 +86,9 @@ exports.createOrder = catchAsync(async (req, res, next)=>{
         antherPhone: req.body.antherPhone,
     });
 
-    sendOrderToUser(req.user.id, order, "create-order", {
-        role: "user",
-        persistNotification: false,
-        skipPush: true,
-    });
-    sendOrderToUser(req.body.restaurantId, order, "create-order", {
+    sendRealtimeOrderToUser(req.user.id, order, "create-order");
+    sendRealtimeOrderToUser(req.body.restaurantId, order, "create-order");
+    sendNotificationToUser(req.body.restaurantId, order, "create-order", {
         role: "restaurant",
         persistNotification: true,
     });
@@ -200,7 +197,8 @@ exports.changStatus = (id) => async (req, res, next) => {
     if (data.status === "2") {
         if (deli?.delivery?.length) {
             deli.delivery.forEach((item) => {
-                sendOrderToUser(item._id.toString(), data, `change-status-to-deli`, {
+                sendRealtimeOrderToUser(item._id.toString(), data, `change-status-to-deli`);
+                sendNotificationToUser(item._id.toString(), data, `change-status-to-deli`, {
                     role: "delivery",
                     persistNotification: true,
                 });
@@ -209,35 +207,40 @@ exports.changStatus = (id) => async (req, res, next) => {
     }else if (data.status === "3"){
         if (deli?.delivery?.length) {
             deli.delivery.forEach((item) => {
-                sendOrderToUser(item._id.toString(), data, `change-status-to-delete-from-deli`, {
+                sendRealtimeOrderToUser(item._id.toString(), data, `change-status-to-delete-from-deli`);
+                sendNotificationToUser(item._id.toString(), data, `change-status-to-delete-from-deli`, {
                     role: "delivery",
                     persistNotification: true,
                 });
             });
         }
-        sendOrderToUser(data.deliveryId?.id || data.deliveryId?._id || data.deliveryId, data, `change-status-to-deli-forMe-3`, {
+        sendRealtimeOrderToUser(data.deliveryId?.id || data.deliveryId?._id || data.deliveryId, data, `change-status-to-deli-forMe-3`);
+        sendNotificationToUser(data.deliveryId?.id || data.deliveryId?._id || data.deliveryId, data, `change-status-to-deli-forMe-3`, {
             role: "delivery",
             persistNotification: true,
         });
 
     }else if (data.status === "4"){
-        sendOrderToUser(data.deliveryId?.id || data.deliveryId?._id || data.deliveryId, data, `change-status-to-deli-forMe-4`, {
+        sendRealtimeOrderToUser(data.deliveryId?.id || data.deliveryId?._id || data.deliveryId, data, `change-status-to-deli-forMe-4`);
+        sendNotificationToUser(data.deliveryId?.id || data.deliveryId?._id || data.deliveryId, data, `change-status-to-deli-forMe-4`, {
             role: "delivery",
             persistNotification: true,
         });
     }
     // Send to restaurant
-    sendOrderToUser(restaurantId, data, `change-status-to-rest`, {
+    sendRealtimeOrderToUser(restaurantId, data, `change-status-to-rest`);
+    sendNotificationToUser(restaurantId, data, `change-status-to-rest`, {
         role: "restaurant",
         persistNotification: false,
     });
 
     // Send to customer
-    sendOrderToUser(data.userId.id, data, `change-status-to-user`, {
+    sendRealtimeOrderToUser(data.userId.id, data, `change-status-to-user`);
+    sendNotificationToUser(data.userId.id, data, `change-status-to-user`, {
         role: "user",
         persistNotification: true,
-        screen: data.status === "4" ? "statusOrder" : "notification",
-        openStatusOrder: data.status === "4",
+        screen: data.status === "4" ? "rateRestaurant" : "notification",
+        openStatusOrder: false,
     });
 
     res.status(200).json({
