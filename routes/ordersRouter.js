@@ -1,5 +1,5 @@
 const {Router} = require('express');
-const {createOrder, getAllMyOrder, getOrderStatus, changStatus, getOrder} = require('../controllers/orderController');
+const {createOrder, getAllMyOrder, getLastActiveUserOrder, getOrderStatus, changStatus, getOrder} = require('../controllers/orderController');
 const {protect, restrictTo} = require('../controllers/auth/authController');
 const { getMyNotifications, markNotificationAsRead } = require('../controllers/notificationController');
 const Order = require('./../models/orderModel');
@@ -14,6 +14,7 @@ const router = Router();
 router.get('/getOneOrder/:id', getOrder);
 // user Controller
 router.get('/user/myAllOrders', protect(User), restrictTo('user'), getAllMyOrder('userId'));
+router.get('/user/lastActiveOrder', protect(User), restrictTo('user'), getLastActiveUserOrder);
 router.get('/user/myNotifications', protect(User), restrictTo('user'), getMyNotifications('user'));
 router.patch('/user/myNotifications/:id/read', protect(User), restrictTo('user'), markNotificationAsRead('user'));
 router.post('/user/createOrder', protect(User), restrictTo('user'), createOrder);

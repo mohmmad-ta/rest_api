@@ -10,41 +10,78 @@ const userSockets = new Map();
 
 function buildPushPayload(type, order) {
   const orderId = order?._id?.toString?.() || order?.id || '';
+  const orderStatus = `${order?.status || ''}`;
+  const statusLabelEn = {
+    '0': 'rejected',
+    '1': 'waiting',
+    '2': 'preparing',
+    '3': 'on the way',
+    '4': 'delivered',
+  }[orderStatus] || 'updated';
+  const statusLabelAr = {
+    '0': 'مرفوض',
+    '1': 'قيد الانتظار',
+    '2': 'قيد التجهيز',
+    '3': 'في الطريق',
+    '4': 'تم التوصيل',
+  }[orderStatus] || 'تم التحديث';
 
   const notifications = {
     'create-order': {
       title: 'New order',
+      titleAr: 'طلب جديد',
       body: `Order #${orderId} was created.`,
+      bodyAr: `تم إنشاء الطلب رقم #${orderId}.`,
     },
     'change-status-to-rest': {
-      title: 'Order status updated',
-      body: `Order #${orderId} has a new status.`,
+      title: 'Order updated',
+      titleAr: 'تم تحديث الطلب',
+      body: `Order #${orderId} status has been updated.`,
+      bodyAr: `تم تحديث حالة الطلب رقم #${orderId}.`,
     },
     'change-status-to-user': {
-      title: 'Order updated',
-      body: `Your order #${orderId} status is now ${order?.status || ''}.`.trim(),
+      title: orderStatus === '4' ? 'Order delivered' : 'Order updated',
+      titleAr: orderStatus === '4' ? 'تم توصيل الطلب' : 'تم تحديث الطلب',
+      body:
+          orderStatus === '4'
+              ? `Your order #${orderId} has been delivered.`
+              : `Your order #${orderId} is now ${statusLabelEn}.`.trim(),
+      bodyAr:
+          orderStatus === '4'
+              ? `تم توصيل طلبك رقم #${orderId}.`
+              : `حالة طلبك رقم #${orderId} أصبحت ${statusLabelAr}.`,
     },
     'change-status-to-deli': {
       title: 'New delivery order',
+      titleAr: 'طلب توصيل جديد',
       body: `Order #${orderId} is ready for delivery review.`,
+      bodyAr: `الطلب رقم #${orderId} جاهز لمراجعة التوصيل.`,
     },
     'change-status-to-delete-from-deli': {
       title: 'Order no longer available',
+      titleAr: 'الطلب لم يعد متاحاً',
       body: `Order #${orderId} was assigned or removed.`,
+      bodyAr: `تم إسناد الطلب رقم #${orderId} أو إزالته.`,
     },
     'change-status-to-deli-forMe-3': {
       title: 'Delivery update',
-      body: `Order #${orderId} has been delivered.`,
+      titleAr: 'تحديث التوصيل',
+      body: `Order #${orderId} has been assigned to you.`,
+      bodyAr: `تم إسناد الطلب رقم #${orderId} إليك.`,
     },
     'change-status-to-deli-forMe-4': {
       title: 'Delivery update',
-      body: `Order #${orderId} was cancelled.`,
+      titleAr: 'تحديث التوصيل',
+      body: `Order #${orderId} has been completed.`,
+      bodyAr: `تم إنهاء الطلب رقم #${orderId}.`,
     },
   };
 
   return notifications[type] || {
     title: 'Order update',
+    titleAr: 'تحديث الطلب',
     body: `Order #${orderId} has a new update.`,
+    bodyAr: `يوجد تحديث جديد على الطلب رقم #${orderId}.`,
   };
 }
 

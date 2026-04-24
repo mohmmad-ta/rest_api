@@ -22,9 +22,11 @@ const sendPushToExternalUser = async (externalId, payload) => {
         target_channel: 'push',
         headings: {
             en: payload.title || 'Notification',
+            ar: payload.titleAr || payload.title || 'إشعار',
         },
         contents: {
             en: payload.body || '',
+            ar: payload.bodyAr || payload.body || '',
         },
         data: payload.data || {},
     };

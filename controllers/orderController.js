@@ -138,6 +138,18 @@ exports.getAllMyOrder = (id) => catchAsync(async (req, res, next) => {
     });
 });
 
+exports.getLastActiveUserOrder = catchAsync(async (req, res) => {
+    const data = await Order.findOne({
+        userId: req.user.id,
+        status: { $nin: ['0', '4'] },
+    }).sort('-createdAt');
+
+    res.status(200).json({
+        status: 'success',
+        data,
+    });
+});
+
 exports.getOrderStatus = (id) => async (req, res, next) => {
     let idParams = req.user.id;
     let access = id;
@@ -224,7 +236,8 @@ exports.changStatus = (id) => async (req, res, next) => {
     sendOrderToUser(data.userId.id, data, `change-status-to-user`, {
         role: "user",
         persistNotification: true,
-        openStatusOrder: true,
+        screen: data.status === "4" ? "statusOrder" : "notification",
+        openStatusOrder: data.status === "4",
     });
 
     res.status(200).json({
