@@ -3,87 +3,11 @@ const WebSocket = require('ws');
 const jwt = require('jsonwebtoken')
 const { URL } = require('url');
 const { sendPushToExternalUser } = require('../utils/oneSignal');
+const { buildNotificationTemplate } = require('../utils/notificationTemplates');
 const { createInAppNotification } = require('./notificationController');
 
 let wss = null;
 const userSockets = new Map();
-
-function buildPushPayload(type, order) {
-  const orderId = order?._id?.toString?.() || order?.id || '';
-  const orderStatus = `${order?.status || ''}`;
-  const statusLabelEn = {
-    '0': 'rejected',
-    '1': 'waiting',
-    '2': 'preparing',
-    '3': 'on the way',
-    '4': 'delivered',
-  }[orderStatus] || 'updated';
-  const statusLabelAr = {
-    '0': 'مرفوض',
-    '1': 'قيد الانتظار',
-    '2': 'قيد التجهيز',
-    '3': 'في الطريق',
-    '4': 'تم التوصيل',
-  }[orderStatus] || 'تم التحديث';
-
-  const notifications = {
-    'create-order': {
-      title: 'New order',
-      titleAr: 'طلب جديد',
-      body: `Order #${orderId} was created.`,
-      bodyAr: `تم إنشاء الطلب رقم #${orderId}.`,
-    },
-    'change-status-to-rest': {
-      title: 'Order updated',
-      titleAr: 'تم تحديث الطلب',
-      body: `Order #${orderId} status has been updated.`,
-      bodyAr: `تم تحديث حالة الطلب رقم #${orderId}.`,
-    },
-    'change-status-to-user': {
-      title: orderStatus === '4' ? 'Rate your restaurant' : 'Order updated',
-      titleAr: orderStatus === '4' ? 'قيّم المطعم' : 'تم تحديث الطلب',
-      body:
-          orderStatus === '4'
-              ? `Your order #${orderId} has been delivered. Rate your restaurant now.`
-              : `Your order #${orderId} is now ${statusLabelEn}.`.trim(),
-      bodyAr:
-          orderStatus === '4'
-              ? `تم توصيل طلبك رقم #${orderId}. قيّم المطعم الآن.`
-              : `حالة طلبك رقم #${orderId} أصبحت ${statusLabelAr}.`,
-    },
-    'change-status-to-deli': {
-      title: 'New delivery order',
-      titleAr: 'طلب توصيل جديد',
-      body: `Order #${orderId} is ready for delivery review.`,
-      bodyAr: `الطلب رقم #${orderId} جاهز لمراجعة التوصيل.`,
-    },
-    'change-status-to-delete-from-deli': {
-      title: 'Order no longer available',
-      titleAr: 'الطلب لم يعد متاحاً',
-      body: `Order #${orderId} was assigned or removed.`,
-      bodyAr: `تم إسناد الطلب رقم #${orderId} أو إزالته.`,
-    },
-    'change-status-to-deli-forMe-3': {
-      title: 'Delivery update',
-      titleAr: 'تحديث التوصيل',
-      body: `Order #${orderId} has been assigned to you.`,
-      bodyAr: `تم إسناد الطلب رقم #${orderId} إليك.`,
-    },
-    'change-status-to-deli-forMe-4': {
-      title: 'Delivery update',
-      titleAr: 'تحديث التوصيل',
-      body: `Order #${orderId} has been completed.`,
-      bodyAr: `تم إنهاء الطلب رقم #${orderId}.`,
-    },
-  };
-
-  return notifications[type] || {
-    title: 'Order update',
-    titleAr: 'تحديث الطلب',
-    body: `Order #${orderId} has a new update.`,
-    bodyAr: `يوجد تحديث جديد على الطلب رقم #${orderId}.`,
-  };
-}
 
 function buildExternalId(userId, role) {
   const normalizedUserId = userId?.toString?.() || `${userId || ''}`.trim();
@@ -153,28 +77,29 @@ function sendNotificationToUser(userId, order, type, options = {}) {
 
   Promise.resolve()
       .then(async () => {
-        const payload = buildPushPayload(type, order);
+        const payload = buildNotificationTemplate(type, order);
         const notificationData = {
           type,
+          template: payload.key,
           orderId: order?._id?.toString?.() || order?.id || null,
           status: order?.status || null,
           screen: options.screen || 'notification',
           openStatusOrder: Boolean(options.openStatusOrder),
         };
 
-        if (options.persistNotification) {
+        if (normalizedUserId && options.role) {
           await createInAppNotification({
             recipientId: normalizedUserId,
             recipientRole: options.role,
             order,
             type,
             title: payload.title,
+            titleAr: payload.titleAr,
             message: payload.body,
+            messageAr: payload.bodyAr,
             screen: options.screen || 'notification',
             openStatusOrder: Boolean(options.openStatusOrder),
-            data: {
-              status: order?.status || null,
-            },
+            data: notificationData,
           });
         }
 

@@ -1,18 +1,30 @@
-const axios = require('axios');
-
 const ONE_SIGNAL_API_URL = 'https://api.onesignal.com/notifications';
+const getOneSignalApiKey = () =>
+    process.env.ONESIGNAL_APP_API_KEY || process.env.ONESIGNAL_REST_API_KEY;
+
+const isLikelyExternalIdKey = (value = '') => value.startsWith('os_v2_app_');
 
 const buildHeaders = () => ({
-    Authorization: `Key ${process.env.ONESIGNAL_REST_API_KEY}`,
+    Authorization: `Key ${getOneSignalApiKey()}`,
     'Content-Type': 'application/json',
 });
 
 const sendPushToExternalUser = async (externalId, payload) => {
-    if (!process.env.ONESIGNAL_APP_ID || !process.env.ONESIGNAL_REST_API_KEY) {
+    const apiKey = getOneSignalApiKey();
+
+    if (!process.env.ONESIGNAL_APP_ID || !apiKey) {
+        console.warn('OneSignal is not configured. Missing ONESIGNAL_APP_ID or ONESIGNAL_APP_API_KEY.');
         return null;
     }
 
     if (!externalId) return null;
+
+    if (isLikelyExternalIdKey(apiKey)) {
+        console.error(
+            'OneSignal API key looks incorrect. ONESIGNAL_APP_API_KEY/ONESIGNAL_REST_API_KEY is using an external-id key, not an App API key.'
+        );
+        return null;
+    }
 
     const body = {
         app_id: process.env.ONESIGNAL_APP_ID,
@@ -31,12 +43,33 @@ const sendPushToExternalUser = async (externalId, payload) => {
         data: payload.data || {},
     };
 
-    const { data } = await axios.post(ONE_SIGNAL_API_URL, body, {
-        headers: buildHeaders(),
-        timeout: 10000,
-    });
+    try {
+        const response = await fetch(ONE_SIGNAL_API_URL, {
+            method: 'POST',
+            headers: buildHeaders(),
+            body: JSON.stringify(body),
+        });
 
-    return data;
+        const data = await response.json();
+
+        if (!response.ok) {
+            console.error('OneSignal send failed:', {
+                status: response.status,
+                externalId,
+                response: data,
+            });
+            throw new Error(JSON.stringify(data));
+        }
+
+        return data;
+    } catch (error) {
+        console.error('OneSignal send failed:', {
+            externalId,
+            response: error?.message || error,
+        });
+
+        throw error;
+    }
 };
 
 module.exports = {

@@ -90,7 +90,6 @@ exports.createOrder = catchAsync(async (req, res, next)=>{
     sendRealtimeOrderToUser(req.body.restaurantId, order, "create-order");
     sendNotificationToUser(req.body.restaurantId, order, "create-order", {
         role: "restaurant",
-        persistNotification: true,
     });
 
     res.status(200).json({
@@ -200,7 +199,6 @@ exports.changStatus = (id) => async (req, res, next) => {
                 sendRealtimeOrderToUser(item._id.toString(), data, `change-status-to-deli`);
                 sendNotificationToUser(item._id.toString(), data, `change-status-to-deli`, {
                     role: "delivery",
-                    persistNotification: true,
                 });
             });
         }
@@ -210,21 +208,18 @@ exports.changStatus = (id) => async (req, res, next) => {
                 sendRealtimeOrderToUser(item._id.toString(), data, `change-status-to-delete-from-deli`);
                 sendNotificationToUser(item._id.toString(), data, `change-status-to-delete-from-deli`, {
                     role: "delivery",
-                    persistNotification: true,
                 });
             });
         }
         sendRealtimeOrderToUser(data.deliveryId?.id || data.deliveryId?._id || data.deliveryId, data, `change-status-to-deli-forMe-3`);
         sendNotificationToUser(data.deliveryId?.id || data.deliveryId?._id || data.deliveryId, data, `change-status-to-deli-forMe-3`, {
             role: "delivery",
-            persistNotification: true,
         });
 
     }else if (data.status === "4"){
         sendRealtimeOrderToUser(data.deliveryId?.id || data.deliveryId?._id || data.deliveryId, data, `change-status-to-deli-forMe-4`);
         sendNotificationToUser(data.deliveryId?.id || data.deliveryId?._id || data.deliveryId, data, `change-status-to-deli-forMe-4`, {
             role: "delivery",
-            persistNotification: true,
         });
     }
     // Send to restaurant
@@ -238,7 +233,6 @@ exports.changStatus = (id) => async (req, res, next) => {
     sendRealtimeOrderToUser(data.userId.id, data, `change-status-to-user`);
     sendNotificationToUser(data.userId.id, data, `change-status-to-user`, {
         role: "user",
-        persistNotification: true,
         screen: data.status === "4" ? "rateRestaurant" : "notification",
         openStatusOrder: false,
     });

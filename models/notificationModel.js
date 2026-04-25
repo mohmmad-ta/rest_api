@@ -24,9 +24,17 @@ const notificationSchema = new mongoose.Schema(
             required: [true, 'يرجى إدخال عنوان الإشعار'],
             trim: true,
         },
+        titleAr: {
+            type: String,
+            trim: true,
+        },
         message: {
             type: String,
             required: [true, 'يرجى إدخال نص الإشعار'],
+            trim: true,
+        },
+        messageAr: {
+            type: String,
             trim: true,
         },
         screen: {
