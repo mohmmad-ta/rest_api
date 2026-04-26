@@ -1,4 +1,4 @@
-const ONE_SIGNAL_API_URL = 'https://api.onesignal.com/notifications';
+const ONE_SIGNAL_API_URL = 'https://api.onesignal.com/notifications?c=push';
 const getOneSignalApiKey = () =>
     process.env.ONESIGNAL_APP_API_KEY || process.env.ONESIGNAL_REST_API_KEY;
 
@@ -50,7 +50,8 @@ const sendPushToExternalUser = async (externalId, payload) => {
             body: JSON.stringify(body),
         });
 
-        const data = await response.json();
+        const rawBody = await response.text();
+        const data = rawBody ? JSON.parse(rawBody) : {};
 
         if (!response.ok) {
             console.error('OneSignal send failed:', {

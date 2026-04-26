@@ -122,11 +122,11 @@ exports.getAllMyOrder = (id) => catchAsync(async (req, res, next) => {
         req.query
     )
         .filter()
-        .sort("-createdAt")
+        .sort()
         .limitFields()
         .paginate();
 
-    const data = await features.query;
+    const data = await features.query.sort('-createdAt');
 
     res.status(200).json({
         status: 'success',

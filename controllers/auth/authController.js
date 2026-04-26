@@ -713,10 +713,17 @@ exports.loginUser = catchAsync(async (req, res, next) => {
     if (!phone || !password) {
         return next(new AppError('يرجى إدخال رقم الهاتف وكلمة المرور!', 400));
     }
-    const user = await User.findOne({ phone }).select('+password');
+    const user = await User.findOne({ phone })
+        .setOptions({ includeInactive: true })
+        .select('+password +active +signupOtpCode +signupOtpExpires');
 
     if (!user || !(await user.correctPassword(password, user.password))) {
         return next(new AppError('رقم الهاتف أو كلمة المرور غير صحيحة!', 401));
+    }
+
+    if (user.active === false) {
+        await setSignupOtpForUser(user);
+        return respondWithSignupOtpChallenge(res, user);
     }
 
     createSendToken(user, 200, res);
@@ -731,13 +738,18 @@ exports.loginRestaurant = catchAsync(async (req, res, next) => {
     const user = await Restaurant.findOne({ phone })
         .setOptions({ includeInactive: true })
         .populate('delivery')
-        .select('+password');
+        .select('+password +signupOtpCode +signupOtpExpires');
 
     if (!user || !(await user.correctPassword(password, user.password))) {
         return next(new AppError('رقم الهاتف أو كلمة المرور غير صحيحة!', 401));
     }
 
     if (user.active === false) {
+        if (user.signupOtpCode || user.signupOtpExpires) {
+            await setSignupOtpForUser(user);
+            return respondWithSignupOtpChallenge(res, user);
+        }
+
         return respondWithInactiveRestaurantAccount(res, user);
     }
 
