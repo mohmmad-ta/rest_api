@@ -7,6 +7,7 @@ const Delivery = require("../models/auth/deliveryModel");
 const Restaurant = require("../models/auth/restaurantModel");
 const {sendRealtimeOrderToUser, sendNotificationToUser, broadcastOrder} = require("./wsController");
 const MAX_RESTAURANT_ORDER_RADIUS_KM = 10;
+const APP_TIMEZONE = process.env.APP_TIMEZONE || 'Asia/Baghdad';
 
 const getStartOfYesterday = () => {
     const date = new Date();
@@ -45,6 +46,66 @@ const calculateDistanceKm = (from, to) => {
     return earthRadiusKm * c;
 };
 
+const parseTimeToMinutes = (value) => {
+    const match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+
+    if (!match) {
+        return null;
+    }
+
+    const hours = Number(match[1]);
+    const minutes = Number(match[2]);
+
+    if (
+        !Number.isInteger(hours) ||
+        !Number.isInteger(minutes) ||
+        hours < 0 ||
+        hours > 23 ||
+        minutes < 0 ||
+        minutes > 59
+    ) {
+        return null;
+    }
+
+    return hours * 60 + minutes;
+};
+
+const getCurrentMinutesInTimezone = (timeZone = APP_TIMEZONE) => {
+    const formatter = new Intl.DateTimeFormat('en-GB', {
+        timeZone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    });
+
+    const parts = formatter.formatToParts(new Date());
+    const hour = Number(parts.find((part) => part.type === 'hour')?.value || 0);
+    const minute = Number(parts.find((part) => part.type === 'minute')?.value || 0);
+
+    return hour * 60 + minute;
+};
+
+const isRestaurantOpenNow = (workingHours) => {
+    const openMinutes = parseTimeToMinutes(workingHours?.open);
+    const closeMinutes = parseTimeToMinutes(workingHours?.close);
+
+    if (openMinutes === null || closeMinutes === null) {
+        return true;
+    }
+
+    const nowMinutes = getCurrentMinutesInTimezone();
+
+    if (openMinutes === closeMinutes) {
+        return true;
+    }
+
+    if (openMinutes < closeMinutes) {
+        return nowMinutes >= openMinutes && nowMinutes < closeMinutes;
+    }
+
+    return nowMinutes >= openMinutes || nowMinutes < closeMinutes;
+};
+
 exports.aliasTopTours = (req, res, next) => {
     req.query.limit = '5';
     req.query.sort = '-ratingsAverage,price';
@@ -53,10 +114,14 @@ exports.aliasTopTours = (req, res, next) => {
 };
 
 exports.createOrder = catchAsync(async (req, res, next)=>{
-    const restaurant = await Restaurant.findById(req.body.restaurantId).select('location');
+    const restaurant = await Restaurant.findById(req.body.restaurantId).select('location workingHours');
 
     if (!restaurant) {
         return next(new AppError('المطعم غير موجود.', 404));
+    }
+
+    if (!isRestaurantOpenNow(restaurant.workingHours)) {
+        return next(new AppError('المطعم مغلق الآن. لا يمكن إنشاء طلب في الوقت الحالي.', 400));
     }
 
     const restaurantCoordinates = getValidCoordinates(restaurant.location);

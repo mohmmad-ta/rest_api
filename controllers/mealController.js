@@ -57,7 +57,21 @@ exports.resizeTourImages = catchAsync(async (req, res, next) => {
 
 
 exports.getAllRestaurant = factory.getAll(Restaurant);
-exports.getMeal = factory.getOne(Meal);
+exports.getMeal = catchAsync(async (req, res, next) => {
+    const data = await Meal.findById(req.params.id).populate({
+        path: 'restaurantId',
+        select: 'name workingHours active',
+    });
+
+    if (!data) {
+        return next(new AppError('No document found with that ID', 404));
+    }
+
+    res.status(200).json({
+        status: 'success',
+        data,
+    });
+});
 exports.updateMeal = factory.updateOne(Meal);
 exports.deleteMeal = factory.deleteOne(Meal);
 exports.createMeal = factory.createOne(Meal);

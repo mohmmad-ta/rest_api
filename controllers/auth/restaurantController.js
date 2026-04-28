@@ -55,13 +55,21 @@ exports.getMeRestaurant = async (req, res, next) => {
 
 
 exports.updateMeRestaurant = catchAsync(async (req, res, next) => {
-    const filteredBody = filterObj(req.body, 'name', 'discount', 'image', 'deliveryTime', 'location');
+    const filteredBody = filterObj(req.body, 'name', 'discount', 'image', 'deliveryTime', 'location', 'workingHours');
 
     if (typeof filteredBody.location === 'string') {
         try {
             filteredBody.location = JSON.parse(filteredBody.location);
         } catch (error) {
             return next(new AppError('صيغة الموقع غير صحيحة.', 400));
+        }
+    }
+
+    if (typeof filteredBody.workingHours === 'string') {
+        try {
+            filteredBody.workingHours = JSON.parse(filteredBody.workingHours);
+        } catch (error) {
+            return next(new AppError('صيغة وقت عمل المطعم غير صحيحة.', 400));
         }
     }
 

@@ -47,6 +47,16 @@ const restaurantSchema = new mongoose.Schema({
             type: String,
             default: '15 - 25'
         },
+        workingHours: {
+            open: {
+                type: String,
+                default: '09:00'
+            },
+            close: {
+                type: String,
+                default: '23:00'
+            }
+        },
         location: {
             title: {
                 type: String,
