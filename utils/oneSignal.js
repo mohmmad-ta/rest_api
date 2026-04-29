@@ -2,8 +2,6 @@ const ONE_SIGNAL_API_URL = 'https://api.onesignal.com/notifications?c=push';
 const getOneSignalApiKey = () =>
     process.env.ONESIGNAL_APP_API_KEY || process.env.ONESIGNAL_REST_API_KEY;
 
-const isLikelyExternalIdKey = (value = '') => value.startsWith('os_v2_app_');
-
 const buildHeaders = () => ({
     Authorization: `Key ${getOneSignalApiKey()}`,
     'Content-Type': 'application/json',
@@ -18,13 +16,6 @@ const sendPushToExternalUser = async (externalId, payload) => {
     }
 
     if (!externalId) return null;
-
-    if (isLikelyExternalIdKey(apiKey)) {
-        console.error(
-            'OneSignal API key looks incorrect. ONESIGNAL_APP_API_KEY/ONESIGNAL_REST_API_KEY is using an external-id key, not an App API key.'
-        );
-        return null;
-    }
 
     const body = {
         app_id: process.env.ONESIGNAL_APP_ID,

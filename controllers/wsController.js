@@ -87,20 +87,24 @@ function sendNotificationToUser(userId, order, type, options = {}) {
           openStatusOrder: Boolean(options.openStatusOrder),
         };
 
-        if (normalizedUserId && options.role) {
-          await createInAppNotification({
-            recipientId: normalizedUserId,
-            recipientRole: options.role,
-            order,
-            type,
-            title: payload.title,
-            titleAr: payload.titleAr,
-            message: payload.body,
-            messageAr: payload.bodyAr,
-            screen: options.screen || 'notification',
-            openStatusOrder: Boolean(options.openStatusOrder),
-            data: notificationData,
-          });
+        if (normalizedUserId && options.role && options.persistNotification !== false) {
+          try {
+            await createInAppNotification({
+              recipientId: normalizedUserId,
+              recipientRole: options.role,
+              order,
+              type,
+              title: payload.title,
+              titleAr: payload.titleAr,
+              message: payload.body,
+              messageAr: payload.bodyAr,
+              screen: options.screen || 'notification',
+              openStatusOrder: Boolean(options.openStatusOrder),
+              data: notificationData,
+            });
+          } catch (error) {
+            console.error(`Failed to persist notification for user ${userId}:`, error?.message || error);
+          }
         }
 
         if (options.skipPush) {
