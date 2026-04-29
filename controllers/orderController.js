@@ -155,6 +155,7 @@ exports.createOrder = catchAsync(async (req, res, next)=>{
     sendRealtimeOrderToUser(req.body.restaurantId, order, "create-order");
     sendNotificationToUser(req.body.restaurantId, order, "create-order", {
         role: "restaurant",
+        screen: "homeRest",
     });
 
     res.status(200).json({
@@ -298,8 +299,8 @@ exports.changStatus = (id) => async (req, res, next) => {
     sendRealtimeOrderToUser(data.userId.id, data, `change-status-to-user`);
     sendNotificationToUser(data.userId.id, data, `change-status-to-user`, {
         role: "user",
-        screen: data.status === "4" ? "rateRestaurant" : "notification",
-        openStatusOrder: false,
+        screen: data.status === "4" ? "rateRestaurant" : "statusOrder",
+        openStatusOrder: data.status !== "4",
     });
 
     res.status(200).json({
