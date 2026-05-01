@@ -55,6 +55,14 @@ const orderSchema = new mongoose.Schema(
             type: Date,
             default: Date.now(),
         },
+        restaurantOrderDay: {
+            type: String,
+            trim: true,
+        },
+        restaurantOrderNumber: {
+            type: Number,
+            min: 1,
+        },
         antherPhone: {
             type: String,
             trim: true,
@@ -79,6 +87,8 @@ const orderSchema = new mongoose.Schema(
         toObject: { virtuals: true }
     }
 );
+
+orderSchema.index({ restaurantId: 1, restaurantOrderDay: 1, restaurantOrderNumber: -1 });
 
 // Auto populate relations when finding
 orderSchema.pre(/^find/, function(next) {

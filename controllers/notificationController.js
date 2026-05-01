@@ -36,15 +36,37 @@ exports.createInAppNotification = async ({
 
 exports.getMyNotifications = (role) =>
     catchAsync(async (req, res) => {
-        const notifications = await Notification.find({
+        const page = Math.max(Number(req.query.page) || 1, 1);
+        const limit = Math.max(Number(req.query.limit) || 10, 1);
+        const skip = (page - 1) * limit;
+
+        const filters = {
             recipientId: req.user.id,
             recipientRole: role,
-        }).sort('-createdAt');
+        };
+
+        const [notifications, total] = await Promise.all([
+            Notification.find(filters)
+                .sort('-createdAt')
+                .skip(skip)
+                .limit(limit),
+            Notification.countDocuments(filters),
+        ]);
+
+        const totalPages = Math.max(Math.ceil(total / limit), 1);
 
         res.status(200).json({
             status: 'success',
             results: notifications.length,
             data: notifications,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages,
+                hasNextPage: page < totalPages,
+                hasPrevPage: page > 1,
+            },
         });
     });
 

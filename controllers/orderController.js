@@ -5,6 +5,7 @@ const AppError = require('./../utils/appError');
 const APIFeatures = require('./../utils/apiFeatures');
 const Delivery = require("../models/auth/deliveryModel");
 const Restaurant = require("../models/auth/restaurantModel");
+const RestaurantDailyOrderCounter = require("../models/restaurantDailyOrderCounterModel");
 const {sendRealtimeOrderToUser, sendNotificationToUser, broadcastOrder} = require("./wsController");
 const MAX_RESTAURANT_ORDER_RADIUS_KM = 10;
 const APP_TIMEZONE = process.env.APP_TIMEZONE || 'Asia/Baghdad';
@@ -14,6 +15,17 @@ const getStartOfYesterday = () => {
     date.setDate(date.getDate() - 1);
     date.setHours(0, 0, 0, 0);
     return date;
+};
+
+const getRestaurantOrderDayKey = (date = new Date(), timeZone = APP_TIMEZONE) => {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    });
+
+    return formatter.format(date);
 };
 
 const getValidCoordinates = (location) => {
@@ -143,12 +155,30 @@ exports.createOrder = catchAsync(async (req, res, next)=>{
         );
     }
 
+    const restaurantOrderDay = getRestaurantOrderDayKey();
+    const counter = await RestaurantDailyOrderCounter.findOneAndUpdate(
+        {
+            restaurantId: req.body.restaurantId,
+            dayKey: restaurantOrderDay,
+        },
+        {
+            $inc: { lastNumber: 1 },
+        },
+        {
+            new: true,
+            upsert: true,
+            setDefaultsOnInsert: true,
+        }
+    );
+
     const order = await Order.create({
         userId: req.user.id,
         restaurantId: req.body.restaurantId,
         item: req.body.item,
         location: req.body.location,
         antherPhone: req.body.antherPhone,
+        restaurantOrderDay,
+        restaurantOrderNumber: counter.lastNumber,
     });
 
     sendRealtimeOrderToUser(req.user.id, order, "create-order");
