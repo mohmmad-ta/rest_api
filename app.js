@@ -4,6 +4,7 @@ const cookieParser = require('cookie-parser');
 const logger = require('morgan');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
+const { ipKeyGenerator } = require('express-rate-limit');
 const helmet = require('helmet');
 const hpp = require('hpp');
 const qs = require('qs');
@@ -20,6 +21,39 @@ const statisticsRoutes = require('./routes/statisticsRoutes');
 
 const app = express();
 const api = process.env.API_URL
+
+const parseTrustProxy = (value) => {
+    if (value === undefined || value === null || value === '') {
+        return process.env.NODE_ENV === 'production' ? 1 : false;
+    }
+
+    if (typeof value === 'number') {
+        return value;
+    }
+
+    const normalized = String(value).trim().toLowerCase();
+
+    if (['true', 'yes', 'on'].includes(normalized)) {
+        return true;
+    }
+
+    if (['false', 'no', 'off'].includes(normalized)) {
+        return false;
+    }
+
+    if (normalized === 'loopback' || normalized === 'linklocal' || normalized === 'uniquelocal') {
+        return normalized;
+    }
+
+    const numericValue = Number(normalized);
+    if (Number.isInteger(numericValue) && numericValue >= 0) {
+        return numericValue;
+    }
+
+    return value;
+};
+
+app.set('trust proxy', parseTrustProxy(process.env.TRUST_PROXY));
 app.use(helmet());
 
 // Development logging
@@ -33,6 +67,7 @@ const limiter = rateLimit({
     message: 'Too many requests from this IP, please try again in an hour!',
     standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
     legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+    keyGenerator: (req) => ipKeyGenerator(req.ip || req.socket?.remoteAddress || ''),
 });
 app.use('/api', limiter);
 

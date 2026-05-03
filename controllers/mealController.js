@@ -203,7 +203,7 @@ exports.getRestaurantSearch = catchAsync(async (req, res, next) => {
                     $cond: [
                         {
                             $regexMatch: {
-                                input: { $ifNull: ['$phone', ''] },
+                                input: { $toString: { $ifNull: ['$phone', ''] } },
                                 regex: escapedSearch
                             }
                         },
@@ -224,13 +224,13 @@ exports.getRestaurantSearch = catchAsync(async (req, res, next) => {
                                                 $or: [
                                                     {
                                                         $regexMatch: {
-                                                            input: { $toLower: { $ifNull: ['$$meal.name', ''] } },
+                                                            input: { $toLower: { $toString: { $ifNull: ['$$meal.name', ''] } } },
                                                             regex: escapedSearch.toLowerCase()
                                                         }
                                                     },
                                                     {
                                                         $regexMatch: {
-                                                            input: { $toLower: { $ifNull: ['$$meal.description', ''] } },
+                                                            input: { $toLower: { $toString: { $ifNull: ['$$meal.description', ''] } } },
                                                             regex: escapedSearch.toLowerCase()
                                                         }
                                                     }

@@ -5,6 +5,7 @@ const AppError = require('./../utils/appError');
 const APIFeatures = require('./../utils/apiFeatures');
 const Delivery = require("../models/auth/deliveryModel");
 const Restaurant = require("../models/auth/restaurantModel");
+const Review = require("../models/reviewModel");
 const RestaurantDailyOrderCounter = require("../models/restaurantDailyOrderCounterModel");
 const {sendRealtimeOrderToUser, sendNotificationToUser, broadcastOrder} = require("./wsController");
 const MAX_RESTAURANT_ORDER_RADIUS_KM = 10;
@@ -118,6 +119,38 @@ const isRestaurantOpenNow = (workingHours) => {
     return nowMinutes >= openMinutes || nowMinutes < closeMinutes;
 };
 
+const getOrderRestaurantId = (order) =>
+    order?.restaurantId?._id ||
+    order?.restaurantId?.id ||
+    order?.restaurantId ||
+    null;
+
+const attachNeedsRatingToOrder = async (order, userId) => {
+    if (!order) {
+        return null;
+    }
+
+    const serializedOrder = typeof order.toObject === 'function' ? order.toObject() : { ...order };
+    const restaurantId = getOrderRestaurantId(serializedOrder);
+    let needsRating = false;
+
+    if (String(serializedOrder?.status || '') === '4' && userId && restaurantId) {
+        const existingReview = await Review.exists({
+            user: userId,
+            restaurant: restaurantId,
+        });
+
+        needsRating = !existingReview;
+    }
+
+    serializedOrder.needsRating = needsRating;
+    return serializedOrder;
+};
+
+const attachNeedsRatingToOrders = async (orders, userId) => {
+    return Promise.all((orders || []).map((order) => attachNeedsRatingToOrder(order, userId)));
+};
+
 exports.aliasTopTours = (req, res, next) => {
     req.query.limit = '5';
     req.query.sort = '-ratingsAverage,price';
@@ -206,7 +239,7 @@ exports.getOrder = async (req, res, next) => {
     const data = await query;
     res.status(200).json({
         status: 'success',
-        data: data
+        data: req.user?.id ? await attachNeedsRatingToOrder(data, req.user.id) : data
     });
 };
 exports.getAllMyOrder = (id) => catchAsync(async (req, res, next) => {
@@ -223,18 +256,30 @@ exports.getAllMyOrder = (id) => catchAsync(async (req, res, next) => {
         .paginate();
 
     const data = await features.query.sort('-createdAt');
+    const responseData =
+        id === 'userId'
+            ? await attachNeedsRatingToOrders(data, req.user.id)
+            : data;
 
     res.status(200).json({
         status: 'success',
-        data: data
+        data: responseData
     });
 });
 
 exports.getLastActiveUserOrder = catchAsync(async (req, res) => {
-    const data = await Order.findOne({
+    const orders = await Order.find({
         userId: req.user.id,
-        status: { $nin: ['0', '4'] },
-    }).sort('-createdAt');
+        status: { $ne: '0' },
+    })
+        .sort('-createdAt')
+        .limit(20);
+
+    const enrichedOrders = await attachNeedsRatingToOrders(orders, req.user.id);
+    const data =
+        enrichedOrders.find(
+            (order) => String(order?.status || '') !== '4' || Boolean(order?.needsRating)
+        ) || null;
 
     res.status(200).json({
         status: 'success',

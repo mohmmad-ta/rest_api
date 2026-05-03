@@ -1,4 +1,5 @@
 const rateLimit = require("express-rate-limit");
+const { ipKeyGenerator } = require("express-rate-limit");
 
 const createLimiter = ({
     windowMs,
@@ -12,6 +13,7 @@ const createLimiter = ({
         standardHeaders: true,
         legacyHeaders: false,
         skipSuccessfulRequests,
+        keyGenerator: (req) => ipKeyGenerator(req.ip || req.socket?.remoteAddress || ""),
         message: {
             status: "fail",
             message,

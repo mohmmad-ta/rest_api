@@ -5,18 +5,28 @@ const handleCastErrorDB = err => {
   return new AppError(message, 400);
 };
 
-// const handleDuplicateFieldsDB = err => {
-//   const value = err.errmsg.match(/(["'])(\\?.)*?\1/)[0];
-//   console.log(value);
-//
-//   const message = `Duplicate field value: ${value}. Please use another value!`;
-//   return new AppError(message, 400);
-// };
+const handleDuplicateFieldsDB = err => {
+    const duplicateKey = Object.keys(err.keyValue || {})[0];
+    const duplicateValue = err.keyValue?.[duplicateKey];
+
+    const fieldLabels = {
+        name: 'الاسم',
+        phone: 'رقم الهاتف',
+        email: 'البريد الإلكتروني'
+    };
+
+    const fieldLabel = fieldLabels[duplicateKey] || duplicateKey || 'الحقل';
+    const valueLabel = duplicateValue ? `: ${duplicateValue}` : '';
+
+    return new AppError(`${fieldLabel} مستخدم مسبقًا${valueLabel}`, 400);
+};
 
 const handleValidationErrorDB = err => {
-    const errors = Object.values(err.errors).map(el => el.message);
+    const errors = Object.values(err.errors || {})
+        .map(el => el.message)
+        .filter(Boolean);
 
-    const message = `بيانات غير صحيحة: ${errors.join('. ')}`;
+    const message = errors[0] || 'بيانات غير صحيحة';
     return new AppError(message, 400);
 };
 
@@ -87,15 +97,21 @@ module.exports = (err, req, res, next) => {
   err.status = err.status || 'error';
 
   if (process.env.NODE_ENV === 'development') {
-    sendErrorDev(err, req, res);
-  } else if (process.env.NODE_ENV === 'production') {
-    let error = { ...err };
-    error.message = err.message;
+    let error = err;
 
     if (error.name === 'CastError') error = handleCastErrorDB(error);
-    // if (error.code === 11000) error = handleDuplicateFieldsDB(error);
-    if (error.name === 'ValidationError')
-      error = handleValidationErrorDB(error);
+    if (error.code === 11000) error = handleDuplicateFieldsDB(error);
+    if (error.name === 'ValidationError') error = handleValidationErrorDB(error);
+    if (error.name === 'JsonWebTokenError') error = handleJWTError();
+    if (error.name === 'TokenExpiredError') error = handleJWTExpiredError();
+
+    sendErrorDev(error, req, res);
+  } else if (process.env.NODE_ENV === 'production') {
+    let error = err;
+
+    if (error.name === 'CastError') error = handleCastErrorDB(error);
+    if (error.code === 11000) error = handleDuplicateFieldsDB(error);
+    if (error.name === 'ValidationError') error = handleValidationErrorDB(error);
     if (error.name === 'JsonWebTokenError') error = handleJWTError();
     if (error.name === 'TokenExpiredError') error = handleJWTExpiredError();
 
