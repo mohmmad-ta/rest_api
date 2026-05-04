@@ -68,7 +68,7 @@ if (process.env.NODE_ENV === 'development') {
 
 const limiter = rateLimit({
     windowMs: 60 * 60 * 1000, // 1 hour
-    max: 300, // limit each IP to 300 requests per windowMs
+    max: 400, // limit each IP to 300 requests per windowMs
     message: 'Too many requests from this IP, please try again in an hour!',
     standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
     legacyHeaders: false, // Disable the `X-RateLimit-*` headers

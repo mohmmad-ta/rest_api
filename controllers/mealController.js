@@ -150,159 +150,101 @@ exports.getRestaurantSearch = catchAsync(async (req, res, next) => {
 
     const escapedSearch = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const lowerSearch = searchTerm.toLowerCase();
+    const searchRegex = new RegExp(escapedSearch, 'i');
+    const startsWithRegex = new RegExp(`^${escapedSearch}`, 'i');
 
-    const [searchResult] = await Restaurant.aggregate([
-        {
-            $match: {
-                deleted: { $ne: true },
-                active: { $ne: false }
-            }
-        },
-        {
-            $lookup: {
-                from: 'meals',
-                localField: '_id',
-                foreignField: 'restaurantId',
-                as: 'meals'
-            }
-        },
-        {
-            $addFields: {
-                exactNameMatch: {
-                    $cond: [
-                        { $eq: [{ $toLower: '$name' }, lowerSearch] },
-                        6,
-                        0
-                    ]
-                },
-                startsWithNameMatch: {
-                    $cond: [
-                        {
-                            $regexMatch: {
-                                input: { $toLower: '$name' },
-                                regex: `^${escapedSearch.toLowerCase()}`
-                            }
-                        },
-                        4,
-                        0
-                    ]
-                },
-                nameMatch: {
-                    $cond: [
-                        {
-                            $regexMatch: {
-                                input: { $toLower: '$name' },
-                                regex: escapedSearch.toLowerCase()
-                            }
-                        },
-                        2,
-                        0
-                    ]
-                },
-                phoneMatch: {
-                    $cond: [
-                        {
-                            $regexMatch: {
-                                input: { $toString: { $ifNull: ['$phone', ''] } },
-                                regex: escapedSearch
-                            }
-                        },
-                        1,
-                        0
-                    ]
-                },
-                mealMatch: {
-                    $cond: [
-                        {
-                            $gt: [
-                                {
-                                    $size: {
-                                        $filter: {
-                                            input: '$meals',
-                                            as: 'meal',
-                                            cond: {
-                                                $or: [
-                                                    {
-                                                        $regexMatch: {
-                                                            input: { $toLower: { $toString: { $ifNull: ['$$meal.name', ''] } } },
-                                                            regex: escapedSearch.toLowerCase()
-                                                        }
-                                                    },
-                                                    {
-                                                        $regexMatch: {
-                                                            input: { $toLower: { $toString: { $ifNull: ['$$meal.description', ''] } } },
-                                                            regex: escapedSearch.toLowerCase()
-                                                        }
-                                                    }
-                                                ]
-                                            }
-                                        }
-                                    }
-                                },
-                                0
-                            ]
-                        },
-                        2,
-                        0
-                    ]
-                }
-            }
-        },
-        {
-            $addFields: {
-                searchScore: {
-                    $add: [
-                        '$exactNameMatch',
-                        '$startsWithNameMatch',
-                        '$nameMatch',
-                        '$phoneMatch',
-                        '$mealMatch'
-                    ]
-                }
-            }
-        },
-        {
-            $match: {
-                searchScore: { $gt: 0 }
-            }
-        },
-        {
-            $sort: {
-                searchScore: -1,
-                discount: -1,
-                ratingsAverage: -1,
-                _id: -1
-            }
-        },
-        {
-            $project: {
-                id: { $toString: '$_id' },
-                meals: 0,
-                exactNameMatch: 0,
-                startsWithNameMatch: 0,
-                nameMatch: 0,
-                phoneMatch: 0,
-                mealMatch: 0,
-                searchScore: 0,
-                __v: 0,
-                deleted: 0,
-                password: 0,
-                passwordConfirm: 0,
-                passwordChangedAt: 0,
-                passwordResetToken: 0,
-                passwordResetExpires: 0
-            }
-        },
-        {
-            $facet: {
-                metadata: [{ $count: 'total' }],
-                data: [{ $skip: skip }, { $limit: limit }]
-            }
+    const directRestaurants = await Restaurant.find({
+        $or: [
+            { name: searchRegex },
+            { phone: searchRegex }
+        ]
+    })
+        .select('name phone discount ratingsAverage image role active deliveryTime')
+        .lean();
+
+    const matchedMealRestaurantIds = await Meal.find({
+        $or: [
+            { name: searchRegex },
+            { description: searchRegex }
+        ]
+    }).distinct('restaurantId');
+
+    const restaurantIdMap = new Map();
+
+    directRestaurants.forEach((restaurant) => {
+        restaurantIdMap.set(String(restaurant._id), restaurant);
+    });
+
+    if (matchedMealRestaurantIds.length) {
+        const missingRestaurantIds = matchedMealRestaurantIds.filter(
+            (id) => !restaurantIdMap.has(String(id))
+        );
+
+        if (missingRestaurantIds.length) {
+            const mealMatchedRestaurants = await Restaurant.find({
+                _id: { $in: missingRestaurantIds }
+            })
+                .select('name phone discount ratingsAverage image role active deliveryTime')
+                .lean();
+
+            mealMatchedRestaurants.forEach((restaurant) => {
+                restaurantIdMap.set(String(restaurant._id), restaurant);
+            });
         }
-    ]);
+    }
 
-    const total = searchResult?.metadata?.[0]?.total || 0;
-    const data = searchResult?.data || [];
+    const matchedMealRestaurantIdSet = new Set(matchedMealRestaurantIds.map((id) => String(id)));
+
+    const rankedRestaurants = Array.from(restaurantIdMap.values())
+        .map((restaurant) => {
+            const restaurantId = String(restaurant._id);
+            const restaurantName = String(restaurant.name || '');
+            const restaurantPhone = String(restaurant.phone || '');
+            let searchScore = 0;
+
+            if (restaurantName.toLowerCase() === lowerSearch) {
+                searchScore += 6;
+            }
+
+            if (startsWithRegex.test(restaurantName)) {
+                searchScore += 4;
+            } else if (searchRegex.test(restaurantName)) {
+                searchScore += 2;
+            }
+
+            if (searchRegex.test(restaurantPhone)) {
+                searchScore += 1;
+            }
+
+            if (matchedMealRestaurantIdSet.has(restaurantId)) {
+                searchScore += 2;
+            }
+
+            return {
+                ...restaurant,
+                id: restaurantId,
+                searchScore,
+            };
+        })
+        .filter((restaurant) => restaurant.searchScore > 0)
+        .sort((a, b) => {
+            if (b.searchScore !== a.searchScore) {
+                return b.searchScore - a.searchScore;
+            }
+
+            if (Number(b.discount || 0) !== Number(a.discount || 0)) {
+                return Number(b.discount || 0) - Number(a.discount || 0);
+            }
+
+            if (Number(b.ratingsAverage || 0) !== Number(a.ratingsAverage || 0)) {
+                return Number(b.ratingsAverage || 0) - Number(a.ratingsAverage || 0);
+            }
+
+            return String(b._id).localeCompare(String(a._id));
+        });
+
+    const total = rankedRestaurants.length;
+    const data = rankedRestaurants.slice(skip, skip + limit);
 
     res.status(200).json({
         status: 'success',

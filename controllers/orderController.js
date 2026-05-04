@@ -374,8 +374,8 @@ exports.changStatus = (id) => async (req, res, next) => {
     sendRealtimeOrderToUser(data.userId.id, data, `change-status-to-user`);
     sendNotificationToUser(data.userId.id, data, `change-status-to-user`, {
         role: "user",
-        screen: data.status === "4" ? "rateRestaurant" : "statusOrder",
-        openStatusOrder: data.status !== "4",
+        screen: "statusOrder",
+        openStatusOrder: true,
     });
 
     res.status(200).json({

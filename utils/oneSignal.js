@@ -1,19 +1,6 @@
 const ONE_SIGNAL_API_URL = 'https://api.onesignal.com/notifications?c=push';
 const getOneSignalApiKey = () =>
     process.env.ONESIGNAL_APP_API_KEY || process.env.ONESIGNAL_REST_API_KEY;
-const getPublicBaseUrl = () =>
-    process.env.BACKEND_PUBLIC_URL ||
-    process.env.PUBLIC_BASE_URL ||
-    '';
-const getNotificationLogoUrl = () => {
-    const baseUrl = getPublicBaseUrl().trim().replace(/\/+$/, '');
-
-    if (!baseUrl) {
-        return null;
-    }
-
-    return `${baseUrl}/public/logo.png`;
-};
 
 const buildHeaders = () => ({
     Authorization: `Key ${getOneSignalApiKey()}`,
@@ -30,8 +17,6 @@ const sendPushToExternalUser = async (externalId, payload) => {
 
     if (!externalId) return null;
 
-    const logoUrl = getNotificationLogoUrl();
-
     const body = {
         app_id: process.env.ONESIGNAL_APP_ID,
         include_aliases: {
@@ -47,16 +32,6 @@ const sendPushToExternalUser = async (externalId, payload) => {
             ar: payload.bodyAr || payload.body || '',
         },
         data: payload.data || {},
-        ...(logoUrl
-            ? {
-                small_icon: logoUrl,
-                large_icon: logoUrl,
-                chrome_web_icon: logoUrl,
-                ios_attachments: {
-                    logo: logoUrl,
-                },
-            }
-            : {}),
     };
 
     try {
