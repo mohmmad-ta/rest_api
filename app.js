@@ -4,7 +4,6 @@ const cookieParser = require('cookie-parser');
 const logger = require('morgan');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
-const { ipKeyGenerator } = require('express-rate-limit');
 const helmet = require('helmet');
 const hpp = require('hpp');
 const qs = require('qs');
@@ -53,6 +52,12 @@ const parseTrustProxy = (value) => {
     return value;
 };
 
+const getRateLimitKey = (req) =>
+    req.ip ||
+    req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+    req.socket?.remoteAddress ||
+    'unknown';
+
 app.set('trust proxy', parseTrustProxy(process.env.TRUST_PROXY));
 app.use(helmet());
 
@@ -67,7 +72,7 @@ const limiter = rateLimit({
     message: 'Too many requests from this IP, please try again in an hour!',
     standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
     legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-    keyGenerator: (req) => ipKeyGenerator(req.ip || req.socket?.remoteAddress || ''),
+    keyGenerator: getRateLimitKey,
 });
 app.use('/api', limiter);
 
