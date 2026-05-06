@@ -132,12 +132,13 @@ const attachNeedsRatingToOrder = async (order, userId) => {
 
     const serializedOrder = typeof order.toObject === 'function' ? order.toObject() : { ...order };
     const restaurantId = getOrderRestaurantId(serializedOrder);
+    const orderId = serializedOrder?._id || serializedOrder?.id || null;
     let needsRating = false;
 
-    if (String(serializedOrder?.status || '') === '4' && userId && restaurantId) {
+    if (String(serializedOrder?.status || '') === '4' && userId && restaurantId && orderId) {
         const existingReview = await Review.exists({
             user: userId,
-            restaurant: restaurantId,
+            order: orderId,
         });
 
         needsRating = !existingReview;
@@ -264,6 +265,41 @@ exports.getAllMyOrder = (id) => catchAsync(async (req, res, next) => {
     res.status(200).json({
         status: 'success',
         data: responseData
+    });
+});
+
+exports.getUserOrderHistory = catchAsync(async (req, res) => {
+    const page = Math.max(Number(req.query.page) || 1, 1);
+    const limit = Math.max(Number(req.query.limit) || 10, 1);
+    const skip = (page - 1) * limit;
+
+    const filters = {
+        userId: req.user.id,
+    };
+
+    const [orders, total] = await Promise.all([
+        Order.find(filters)
+            .sort('-createdAt')
+            .skip(skip)
+            .limit(limit),
+        Order.countDocuments(filters),
+    ]);
+
+    const totalPages = Math.max(Math.ceil(total / limit), 1);
+    const responseData = await attachNeedsRatingToOrders(orders, req.user.id);
+
+    res.status(200).json({
+        status: 'success',
+        results: responseData.length,
+        data: responseData,
+        pagination: {
+            page,
+            limit,
+            total,
+            totalPages,
+            hasNextPage: page < totalPages,
+            hasPrevPage: page > 1,
+        },
     });
 });
 
