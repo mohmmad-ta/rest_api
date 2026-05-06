@@ -8,6 +8,15 @@ const handleCastErrorDB = err => {
 const handleDuplicateFieldsDB = err => {
     const duplicateKey = Object.keys(err.keyValue || {})[0];
     const duplicateValue = err.keyValue?.[duplicateKey];
+    const keyPattern = err.keyPattern || {};
+
+    if (keyPattern.order && keyPattern.user) {
+        return new AppError('تم تقييم هذا الطلب مسبقاً.', 400);
+    }
+
+    if (keyPattern.restaurant && keyPattern.user) {
+        return new AppError('تم إرسال تقييم لهذا المطعم مسبقاً.', 400);
+    }
 
     const fieldLabels = {
         name: 'الاسم',

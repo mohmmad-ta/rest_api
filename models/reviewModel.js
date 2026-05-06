@@ -93,4 +93,36 @@ reviewSchema.post(/^findOneAnd/, async function (doc) {
 
 const Review = mongoose.model('Review', reviewSchema);
 
+const syncReviewIndexes = async () => {
+    try {
+        await Review.collection.dropIndex('tour_1_user_1');
+    } catch (error) {
+        if (error?.codeName !== 'IndexNotFound') {
+            console.error('Failed to drop old review index tour_1_user_1:', error);
+        }
+    }
+
+    try {
+        await Review.collection.dropIndex('restaurant_1_user_1');
+    } catch (error) {
+        if (error?.codeName !== 'IndexNotFound') {
+            console.error('Failed to drop old review index restaurant_1_user_1:', error);
+        }
+    }
+
+    try {
+        await Review.syncIndexes();
+    } catch (error) {
+        console.error('Failed to sync review indexes:', error);
+    }
+};
+
+if (mongoose.connection.readyState === 1) {
+    syncReviewIndexes().catch(console.error);
+} else {
+    mongoose.connection.once('open', () => {
+        syncReviewIndexes().catch(console.error);
+    });
+}
+
 module.exports = Review;

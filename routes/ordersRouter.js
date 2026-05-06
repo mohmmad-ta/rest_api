@@ -1,6 +1,6 @@
 const {Router} = require('express');
 const {createOrder, getAllMyOrder, getUserOrderHistory, getLastActiveUserOrder, getOrderStatus, changStatus, getOrder} = require('../controllers/orderController');
-const {protect, restrictTo} = require('../controllers/auth/authController');
+const {protect, protectAnyRole, restrictTo} = require('../controllers/auth/authController');
 const { getMyNotifications, markNotificationAsRead } = require('../controllers/notificationController');
 const Order = require('./../models/orderModel');
 const User = require('./../models/auth/userModel');
@@ -11,7 +11,7 @@ const router = Router();
 
 
 
-router.get('/getOneOrder/:id', getOrder);
+router.get('/getOneOrder/:id', protectAnyRole, getOrder);
 // user Controller
 router.get('/user/myAllOrders', protect(User), restrictTo('user'), getAllMyOrder('userId'));
 router.get('/user/orderHistory', protect(User), restrictTo('user'), getUserOrderHistory);

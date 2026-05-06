@@ -803,6 +803,34 @@ exports.protect = Model => catchAsync(async (req, res, next) => {
     next();
 });
 
+exports.protectAnyRole = catchAsync(async (req, res, next) => {
+    const token = getTokenFromRequest(req);
+
+    if (!token) {
+        return next(new AppError('أنت غير مسجل الدخول! يرجى تسجيل الدخول للوصول.', 401));
+    }
+
+    const decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET);
+    const models = [Admin, User, Delivery, Restaurant];
+
+    let currentUser = null;
+
+    for (const Model of models) {
+        currentUser = await Model.findById(decoded.id);
+        if (currentUser) {
+            break;
+        }
+    }
+
+    if (!currentUser) {
+        return next(new AppError('المستخدم المرتبط بهذا التوكن لم يعد موجودًا.', 401));
+    }
+
+    req.user = currentUser;
+    res.locals.user = currentUser;
+    next();
+});
+
 exports.checkToken = catchAsync(async (req, res, next) => {
     const token = getTokenFromRequest(req);
 
