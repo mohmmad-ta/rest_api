@@ -119,6 +119,26 @@ const isRestaurantOpenNow = (workingHours) => {
     return nowMinutes >= openMinutes || nowMinutes < closeMinutes;
 };
 
+const getNormalizedRestaurantCouponData = (restaurant) => {
+    const couponCode = String(restaurant?.couponCode || '').trim().toUpperCase();
+    const couponPercentage = Number(restaurant?.couponPercentage || 0);
+    const couponExpiresAt = restaurant?.couponExpiresAt ? new Date(restaurant.couponExpiresAt) : null;
+    const isActive =
+        Boolean(couponCode) &&
+        Number.isFinite(couponPercentage) &&
+        couponPercentage > 0 &&
+        couponExpiresAt &&
+        !Number.isNaN(couponExpiresAt.getTime()) &&
+        couponExpiresAt.getTime() > Date.now();
+
+    return {
+        couponCode,
+        couponPercentage,
+        couponExpiresAt,
+        isActive,
+    };
+};
+
 const getOrderRestaurantId = (order) =>
     order?.restaurantId?._id ||
     order?.restaurantId?.id ||
@@ -161,7 +181,7 @@ exports.aliasTopTours = (req, res, next) => {
 
 exports.createOrder = catchAsync(async (req, res, next)=>{
     const restaurant = await Restaurant.findById(req.body.restaurantId).select(
-        'location workingHours discount couponCode couponPercentage couponExpiresAt'
+        'location workingHours discount +couponCode +couponPercentage +couponExpiresAt'
     );
 
     if (!restaurant) {
@@ -191,9 +211,10 @@ exports.createOrder = catchAsync(async (req, res, next)=>{
         );
     }
 
-    const normalizedRestaurantCouponCode = String(restaurant?.couponCode || '').trim().toUpperCase();
+    const { couponCode: normalizedRestaurantCouponCode, couponPercentage, couponExpiresAt, isActive: isCouponActive } =
+        getNormalizedRestaurantCouponData(restaurant);
     const normalizedRequestCouponCode = String(req.body?.couponCode || '').trim().toUpperCase();
-    let couponPercentage = 0;
+    let appliedCouponPercentage = 0;
     let couponCode = undefined;
 
     if (normalizedRequestCouponCode) {
@@ -205,19 +226,16 @@ exports.createOrder = catchAsync(async (req, res, next)=>{
             return next(new AppError('كود الخصم غير صحيح.', 400));
         }
 
-        const couponExpiresAt = restaurant?.couponExpiresAt ? new Date(restaurant.couponExpiresAt) : null;
-
-        if (!couponExpiresAt || Number.isNaN(couponExpiresAt.getTime()) || couponExpiresAt.getTime() <= Date.now()) {
+        if (!isCouponActive || !couponExpiresAt) {
             return next(new AppError('كود الخصم منتهي الصلاحية.', 400));
         }
-
-        couponPercentage = Number(restaurant?.couponPercentage || 0);
 
         if (!Number.isFinite(couponPercentage) || couponPercentage <= 0) {
             return next(new AppError('نسبة كود الخصم غير صالحة.', 400));
         }
 
         couponCode = normalizedRequestCouponCode;
+        appliedCouponPercentage = couponPercentage;
     }
 
     const restaurantOrderDay = getRestaurantOrderDayKey();
@@ -243,7 +261,7 @@ exports.createOrder = catchAsync(async (req, res, next)=>{
         location: req.body.location,
         antherPhone: req.body.antherPhone,
         couponCode,
-        couponPercentage,
+        couponPercentage: appliedCouponPercentage,
         restaurantOrderDay,
         restaurantOrderNumber: counter.lastNumber,
     });
@@ -262,6 +280,46 @@ exports.createOrder = catchAsync(async (req, res, next)=>{
         }
     });
 })
+
+exports.checkCouponCode = catchAsync(async (req, res, next) => {
+    const restaurant = await Restaurant.findById(req.body.restaurantId).select(
+        '+couponCode +couponPercentage +couponExpiresAt'
+    );
+
+    if (!restaurant) {
+        return next(new AppError('المطعم غير موجود.', 404));
+    }
+
+    const enteredCouponCode = String(req.body?.couponCode || '').trim().toUpperCase();
+
+    if (!enteredCouponCode) {
+        return next(new AppError('يرجى إدخال كود الخصم.', 400));
+    }
+
+    const { couponCode, couponPercentage, couponExpiresAt, isActive } =
+        getNormalizedRestaurantCouponData(restaurant);
+
+    if (!couponCode) {
+        return next(new AppError('هذا المطعم لا يملك كود خصم حالياً.', 400));
+    }
+
+    if (enteredCouponCode !== couponCode) {
+        return next(new AppError('كود الخصم غير صحيح.', 400));
+    }
+
+    if (!isActive || !couponExpiresAt) {
+        return next(new AppError('كود الخصم منتهي الصلاحية.', 400));
+    }
+
+    res.status(200).json({
+        status: 'success',
+        data: {
+            valid: true,
+            couponPercentage,
+            couponExpiresAt,
+        }
+    });
+});
 
 exports.getOrder = async (req, res, next) => {
     const query = Order.findById(req.params.id);

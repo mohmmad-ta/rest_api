@@ -46,7 +46,9 @@ const filterObj = (obj, ...allowedFields) => {
 
 exports.getMeRestaurant = async (req, res, next) => {
     req.params.id = req.user.id;
-    const user = await Restaurant.findById(req.params.id).populate('delivery')
+    const user = await Restaurant.findById(req.params.id)
+        .select('+couponCode +couponPercentage +couponExpiresAt')
+        .populate('delivery')
     res.status(200).json({
         status: 'success',
         data: user
@@ -144,10 +146,14 @@ exports.updateMeRestaurant = catchAsync(async (req, res, next) => {
     }
 
     if (req.file) filteredBody.photo = req.file.filename;
-    const updatedUser = await Restaurant.findByIdAndUpdate(req.user.id, filteredBody, {
-        new: true,
-        runValidators: true
-    });
+    const updatedUser = await Restaurant.findByIdAndUpdate(
+        req.user.id,
+        filteredBody,
+        {
+            new: true,
+            runValidators: true
+        }
+    ).select('+couponCode +couponPercentage +couponExpiresAt');
 
     res.status(200).json({
         status: 'success',

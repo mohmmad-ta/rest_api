@@ -52,15 +52,18 @@ const restaurantSchema = new mongoose.Schema({
             trim: true,
             uppercase: true,
             minlength: [3, 'كود الخصم يجب ألا يقل عن 3 أحرف'],
-            maxlength: [20, 'كود الخصم يجب ألا يزيد عن 20 حرفًا']
+            maxlength: [20, 'كود الخصم يجب ألا يزيد عن 20 حرفًا'],
+            select: false
         },
         couponPercentage: {
             type: Number,
             min: [1, 'نسبة كود الخصم يجب أن تكون 1% على الأقل'],
             max: [90, 'نسبة كود الخصم يجب ألا تزيد عن 90%'],
+            select: false
         },
         couponExpiresAt: {
             type: Date,
+            select: false
         },
         workingHours: {
             open: {
