@@ -79,6 +79,15 @@ const orderSchema = new mongoose.Schema(
             trim: true,
             required: [true, 'يرجى إدخال رقم الهاتف'],
         },
+        couponCode: {
+            type: String,
+            trim: true,
+            uppercase: true,
+        },
+        couponPercentage: {
+            type: Number,
+            default: 0
+        },
         status: {
             type: String,
             enum: ['0', '1', '2', '3', '4'], // 0=deleted, 1=pending, 2=preparing, 3=on the way, 4=delivered
@@ -126,7 +135,7 @@ orderSchema.pre(/^find/, function(next) {
 
 // Calculate total price before saving
 orderSchema.pre('save', async function (next) {
-    if (!this.isModified('item')) return next();
+    if (!this.isModified('item') && !this.isModified('couponPercentage')) return next();
 
     // Populate meals and restaurant to get price and discount
     await this.populate('item.Id');
@@ -151,12 +160,14 @@ orderSchema.pre('save', async function (next) {
 
     this.totalPriceBeforeDiscount = total;
 
-    // Apply restaurant discount if available
-    let discount = this.restaurantId?.discount || 0;
-    discount = discount / 100;
-    const discountAmount = total * discount;
+    let restaurantDiscount = Number(this.restaurantId?.discount || 0) / 100;
+    const restaurantDiscountAmount = total * restaurantDiscount;
+    const totalAfterRestaurantDiscount = total - restaurantDiscountAmount;
 
-    this.totalPrice = roundPriceToNearestStep(total - discountAmount, 250);
+    let couponDiscount = Number(this.couponPercentage || 0) / 100;
+    const couponDiscountAmount = totalAfterRestaurantDiscount * couponDiscount;
+
+    this.totalPrice = roundPriceToNearestStep(totalAfterRestaurantDiscount - couponDiscountAmount, 250);
 
     next();
 });

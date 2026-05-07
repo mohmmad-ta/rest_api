@@ -47,6 +47,21 @@ const restaurantSchema = new mongoose.Schema({
             type: String,
             default: '15 - 25'
         },
+        couponCode: {
+            type: String,
+            trim: true,
+            uppercase: true,
+            minlength: [3, 'كود الخصم يجب ألا يقل عن 3 أحرف'],
+            maxlength: [20, 'كود الخصم يجب ألا يزيد عن 20 حرفًا']
+        },
+        couponPercentage: {
+            type: Number,
+            min: [1, 'نسبة كود الخصم يجب أن تكون 1% على الأقل'],
+            max: [90, 'نسبة كود الخصم يجب ألا تزيد عن 90%'],
+        },
+        couponExpiresAt: {
+            type: Date,
+        },
         workingHours: {
             open: {
                 type: String,
@@ -156,6 +171,9 @@ const restaurantSchema = new mongoose.Schema({
         toJSON: { virtuals: true },
         toObject: { virtuals: true }
     });
+
+
+restaurantSchema.index({ couponCode: 1 }, { unique: true, sparse: true });
 
 
 

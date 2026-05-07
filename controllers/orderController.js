@@ -160,7 +160,9 @@ exports.aliasTopTours = (req, res, next) => {
 };
 
 exports.createOrder = catchAsync(async (req, res, next)=>{
-    const restaurant = await Restaurant.findById(req.body.restaurantId).select('location workingHours');
+    const restaurant = await Restaurant.findById(req.body.restaurantId).select(
+        'location workingHours discount couponCode couponPercentage couponExpiresAt'
+    );
 
     if (!restaurant) {
         return next(new AppError('المطعم غير موجود.', 404));
@@ -189,6 +191,35 @@ exports.createOrder = catchAsync(async (req, res, next)=>{
         );
     }
 
+    const normalizedRestaurantCouponCode = String(restaurant?.couponCode || '').trim().toUpperCase();
+    const normalizedRequestCouponCode = String(req.body?.couponCode || '').trim().toUpperCase();
+    let couponPercentage = 0;
+    let couponCode = undefined;
+
+    if (normalizedRequestCouponCode) {
+        if (!normalizedRestaurantCouponCode) {
+            return next(new AppError('هذا المطعم لا يملك كود خصم حالياً.', 400));
+        }
+
+        if (normalizedRequestCouponCode !== normalizedRestaurantCouponCode) {
+            return next(new AppError('كود الخصم غير صحيح.', 400));
+        }
+
+        const couponExpiresAt = restaurant?.couponExpiresAt ? new Date(restaurant.couponExpiresAt) : null;
+
+        if (!couponExpiresAt || Number.isNaN(couponExpiresAt.getTime()) || couponExpiresAt.getTime() <= Date.now()) {
+            return next(new AppError('كود الخصم منتهي الصلاحية.', 400));
+        }
+
+        couponPercentage = Number(restaurant?.couponPercentage || 0);
+
+        if (!Number.isFinite(couponPercentage) || couponPercentage <= 0) {
+            return next(new AppError('نسبة كود الخصم غير صالحة.', 400));
+        }
+
+        couponCode = normalizedRequestCouponCode;
+    }
+
     const restaurantOrderDay = getRestaurantOrderDayKey();
     const counter = await RestaurantDailyOrderCounter.findOneAndUpdate(
         {
@@ -211,6 +242,8 @@ exports.createOrder = catchAsync(async (req, res, next)=>{
         item: req.body.item,
         location: req.body.location,
         antherPhone: req.body.antherPhone,
+        couponCode,
+        couponPercentage,
         restaurantOrderDay,
         restaurantOrderNumber: counter.lastNumber,
     });
