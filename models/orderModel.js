@@ -1,5 +1,16 @@
 const mongoose = require('mongoose');
 
+const roundPriceToNearestStep = (value, step = 250) => {
+    const amount = Number(value || 0);
+    const safeStep = Number(step || 0);
+
+    if (!Number.isFinite(amount) || !Number.isFinite(safeStep) || safeStep <= 0) {
+        return amount;
+    }
+
+    return Math.round(amount / safeStep) * safeStep;
+};
+
 const orderSchema = new mongoose.Schema(
     {
         item: [
@@ -145,7 +156,7 @@ orderSchema.pre('save', async function (next) {
     discount = discount / 100;
     const discountAmount = total * discount;
 
-    this.totalPrice = total - discountAmount;
+    this.totalPrice = roundPriceToNearestStep(total - discountAmount, 250);
 
     next();
 });
