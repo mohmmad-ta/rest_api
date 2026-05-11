@@ -1,5 +1,7 @@
 const mongoose = require('mongoose');
 
+const SERVICE_FEES = 250;
+
 const roundPriceToNearestStep = (value, step = 250) => {
     const amount = Number(value || 0);
     const safeStep = Number(step || 0);
@@ -167,7 +169,7 @@ orderSchema.pre('save', async function (next) {
     let couponDiscount = Number(this.couponPercentage || 0) / 100;
     const couponDiscountAmount = totalAfterRestaurantDiscount * couponDiscount;
 
-    this.totalPrice = roundPriceToNearestStep(totalAfterRestaurantDiscount - couponDiscountAmount, 250);
+    this.totalPrice = roundPriceToNearestStep(totalAfterRestaurantDiscount - couponDiscountAmount, 250) + SERVICE_FEES;
 
     next();
 });
