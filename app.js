@@ -134,8 +134,18 @@ app.use(cors(corsOptions));
 
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
-app.use(express.static(path.join(__dirname, 'public')));
-app.use('/public', express.static(path.join(__dirname, 'public')));
+
+const allowPublicAssetEmbedding = (req, res, next) => {
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    next();
+};
+
+app.use(express.static(path.join(__dirname, 'public'), {
+    setHeaders: (res) => {
+        res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    }
+}));
+app.use('/public', allowPublicAssetEmbedding, express.static(path.join(__dirname, 'public')));
 
 app.use(`${api}/auth`, usersRouter);
 app.use(`${api}/meal`, mealsRouter);
