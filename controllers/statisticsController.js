@@ -7,16 +7,60 @@ const Meal = require('../models/mealModel');
 const Category = require('../models/categoryModel');
 const {
     createOrderMetricsGroup,
+    createOrderMetricsFields,
     createDateMatch,
     createRestaurantMatch,
     createDefaultMetrics,
+    createPayableOrderMatch,
     toObjectId
 } = require('../models/statisticsModel');
 
-const startOfDay = (date = new Date()) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
-const startOfMonth = (date = new Date()) => new Date(date.getFullYear(), date.getMonth(), 1);
-const addDays = (date, days) => new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
-const addMonths = (date, months) => new Date(date.getFullYear(), date.getMonth() + months, 1);
+const STATISTICS_TIMEZONE = 'Asia/Baghdad';
+const STATISTICS_TIMEZONE_OFFSET_MS = 3 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const toStatisticsDate = (date) => new Date(date.getTime() + STATISTICS_TIMEZONE_OFFSET_MS);
+
+const startOfDay = (date = new Date()) => {
+    const shiftedDate = toStatisticsDate(date);
+
+    return new Date(
+        Date.UTC(shiftedDate.getUTCFullYear(), shiftedDate.getUTCMonth(), shiftedDate.getUTCDate()) -
+        STATISTICS_TIMEZONE_OFFSET_MS
+    );
+};
+
+const startOfMonth = (date = new Date()) => {
+    const shiftedDate = toStatisticsDate(date);
+
+    return new Date(
+        Date.UTC(shiftedDate.getUTCFullYear(), shiftedDate.getUTCMonth(), 1) -
+        STATISTICS_TIMEZONE_OFFSET_MS
+    );
+};
+
+const addDays = (date, days) => new Date(date.getTime() + days * DAY_MS);
+
+const addMonths = (date, months) => {
+    const shiftedDate = toStatisticsDate(date);
+
+    return new Date(
+        Date.UTC(shiftedDate.getUTCFullYear(), shiftedDate.getUTCMonth() + months, 1) -
+        STATISTICS_TIMEZONE_OFFSET_MS
+    );
+};
+
+const formatDateKey = (date) => {
+    const shiftedDate = toStatisticsDate(date);
+
+    return `${shiftedDate.getUTCFullYear()}-${String(shiftedDate.getUTCMonth() + 1).padStart(2, '0')}-${String(shiftedDate.getUTCDate()).padStart(2, '0')}`;
+};
+
+const formatMonthKey = (date) => {
+    const shiftedDate = toStatisticsDate(date);
+
+    return `${shiftedDate.getUTCFullYear()}-${String(shiftedDate.getUTCMonth() + 1).padStart(2, '0')}`;
+};
 
 const getSingleMetrics = async (match, label = null) => {
     const [result] = await Order.aggregate([
@@ -50,28 +94,29 @@ const getRestaurantDailySeries = async (restaurantId, days = 7) => {
         {
             $group: {
                 _id: {
-                    year: { $year: '$createdAt' },
-                    month: { $month: '$createdAt' },
-                    day: { $dayOfMonth: '$createdAt' }
+                    date: {
+                        $dateToString: {
+                            format: '%Y-%m-%d',
+                            date: '$createdAt',
+                            timezone: STATISTICS_TIMEZONE
+                        }
+                    }
                 },
-                totalOrders: { $sum: 1 },
-                totalRevenue: { $sum: '$totalPrice' },
-                totalRevenueAfterDiscount: { $sum: '$totalPrice' },
-                totalRevenueBeforeDiscount: { $sum: '$totalPriceBeforeDiscount' }
+                ...createOrderMetricsFields()
             }
         }
     ]);
 
     const mapped = new Map(
         rows.map((row) => {
-            const key = `${row._id.year}-${String(row._id.month).padStart(2, '0')}-${String(row._id.day).padStart(2, '0')}`;
+            const key = row._id.date;
             return [key, row];
         })
     );
 
     return Array.from({ length: days }, (_, index) => {
         const currentDate = addDays(startDate, index);
-        const key = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
+        const key = formatDateKey(currentDate);
         const row = mapped.get(key);
 
         return {
@@ -79,7 +124,13 @@ const getRestaurantDailySeries = async (restaurantId, days = 7) => {
             totalOrders: row?.totalOrders || 0,
             totalRevenue: row?.totalRevenue || 0,
             totalRevenueAfterDiscount: row?.totalRevenueAfterDiscount || 0,
-            totalRevenueBeforeDiscount: row?.totalRevenueBeforeDiscount || 0
+            totalRevenueBeforeDiscount: row?.totalRevenueBeforeDiscount || 0,
+            totalServiceFees: row?.totalServiceFees || 0,
+            restaurantRevenue: row?.restaurantRevenue || 0,
+            pendingOrders: row?.pendingOrders || 0,
+            processingOrders: row?.processingOrders || 0,
+            onTheWayOrders: row?.onTheWayOrders || 0,
+            deliveredOrders: row?.deliveredOrders || 0
         };
     });
 };
@@ -95,27 +146,29 @@ const getRestaurantMonthlySeries = async (restaurantId, months = 6) => {
         {
             $group: {
                 _id: {
-                    year: { $year: '$createdAt' },
-                    month: { $month: '$createdAt' }
+                    month: {
+                        $dateToString: {
+                            format: '%Y-%m',
+                            date: '$createdAt',
+                            timezone: STATISTICS_TIMEZONE
+                        }
+                    }
                 },
-                totalOrders: { $sum: 1 },
-                totalRevenue: { $sum: '$totalPrice' },
-                totalRevenueAfterDiscount: { $sum: '$totalPrice' },
-                totalRevenueBeforeDiscount: { $sum: '$totalPriceBeforeDiscount' }
+                ...createOrderMetricsFields()
             }
         }
     ]);
 
     const mapped = new Map(
         rows.map((row) => {
-            const key = `${row._id.year}-${String(row._id.month).padStart(2, '0')}`;
+            const key = row._id.month;
             return [key, row];
         })
     );
 
     return Array.from({ length: months }, (_, index) => {
         const currentDate = addMonths(startDate, index);
-        const key = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+        const key = formatMonthKey(currentDate);
         const row = mapped.get(key);
 
         return {
@@ -123,7 +176,13 @@ const getRestaurantMonthlySeries = async (restaurantId, months = 6) => {
             totalOrders: row?.totalOrders || 0,
             totalRevenue: row?.totalRevenue || 0,
             totalRevenueAfterDiscount: row?.totalRevenueAfterDiscount || 0,
-            totalRevenueBeforeDiscount: row?.totalRevenueBeforeDiscount || 0
+            totalRevenueBeforeDiscount: row?.totalRevenueBeforeDiscount || 0,
+            totalServiceFees: row?.totalServiceFees || 0,
+            restaurantRevenue: row?.restaurantRevenue || 0,
+            pendingOrders: row?.pendingOrders || 0,
+            processingOrders: row?.processingOrders || 0,
+            onTheWayOrders: row?.onTheWayOrders || 0,
+            deliveredOrders: row?.deliveredOrders || 0
         };
     });
 };
@@ -136,11 +195,11 @@ const getRestaurantOverviewPayload = async (restaurantId, includeInactive = fals
 
     const [restaurant, allTime, todayStats, monthStats, daily, monthly] = await Promise.all([
         getRestaurantInfo(restaurantId, includeInactive),
-        getSingleMetrics({ restaurantId: toObjectId(restaurantId) }, 'allTime'),
+        getSingleMetrics({ restaurantId: toObjectId(restaurantId), ...createPayableOrderMatch() }, 'allTime'),
         getSingleMetrics(createRestaurantMatch(restaurantId, today, tomorrow), 'today'),
         getSingleMetrics(createRestaurantMatch(restaurantId, monthStart, nextMonth), 'month'),
         getRestaurantDailySeries(restaurantId),
-        getRestaurantMonthlySeries(restaurantId)
+        getRestaurantMonthlySeries(restaurantId, 12)
     ]);
 
     return {
@@ -195,17 +254,15 @@ exports.getAdminOverviewStatistics = catchAsync(async (req, res) => {
         Restaurant.countDocuments(),
         Meal.countDocuments(),
         Category.countDocuments(),
-        getSingleMetrics({}, 'allTime'),
+        getSingleMetrics(createPayableOrderMatch(), 'allTime'),
         getSingleMetrics(createDateMatch(today, tomorrow), 'today'),
         getSingleMetrics(createDateMatch(monthStart, nextMonth), 'month'),
         Order.aggregate([
+            { $match: createPayableOrderMatch() },
             {
                 $group: {
                     _id: '$restaurantId',
-                    totalOrders: { $sum: 1 },
-                    totalRevenue: { $sum: '$totalPrice' },
-                    totalRevenueAfterDiscount: { $sum: '$totalPrice' },
-                    totalRevenueBeforeDiscount: { $sum: '$totalPriceBeforeDiscount' }
+                    ...createOrderMetricsFields()
                 }
             },
             { $sort: { totalRevenue: -1, totalOrders: -1 } },
@@ -233,7 +290,9 @@ exports.getAdminOverviewStatistics = catchAsync(async (req, res) => {
                     totalOrders: 1,
                     totalRevenue: 1,
                     totalRevenueAfterDiscount: 1,
-                    totalRevenueBeforeDiscount: 1
+                    totalRevenueBeforeDiscount: 1,
+                    totalServiceFees: 1,
+                    restaurantRevenue: 1
                 }
             }
         ])
@@ -269,13 +328,11 @@ exports.getAdminRestaurantsStatistics = catchAsync(async (req, res) => {
         {
             $facet: {
                 allTime: [
+                    { $match: createPayableOrderMatch() },
                     {
                         $group: {
                             _id: '$restaurantId',
-                            totalOrders: { $sum: 1 },
-                            totalRevenue: { $sum: '$totalPrice' },
-                            totalRevenueAfterDiscount: { $sum: '$totalPrice' },
-                            totalRevenueBeforeDiscount: { $sum: '$totalPriceBeforeDiscount' }
+                            ...createOrderMetricsFields()
                         }
                     }
                 ],

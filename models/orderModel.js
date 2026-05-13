@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const AppError = require('../utils/appError');
 
 const SERVICE_FEES = 250;
 
@@ -11,6 +12,40 @@ const roundPriceToNearestStep = (value, step = 250) => {
     }
 
     return Math.round(amount / safeStep) * safeStep;
+};
+
+const normalizeChoiceTitle = (value) => String(value || '').trim();
+
+const getMealTagPrice = (meal, selectedTag) => {
+    const selectedTitle = normalizeChoiceTitle(selectedTag?.title);
+
+    if (!selectedTitle) {
+        return null;
+    }
+
+    const matchedTag = (meal?.tags || []).find((tag) => normalizeChoiceTitle(tag?.title) === selectedTitle);
+
+    if (!matchedTag) {
+        return null;
+    }
+
+    return Number(matchedTag.price || 0);
+};
+
+const getMealOptionPrice = (meal, selectedOption) => {
+    const selectedTitle = normalizeChoiceTitle(selectedOption?.title);
+
+    if (!selectedTitle) {
+        return null;
+    }
+
+    const matchedOption = (meal?.options || []).find((option) => normalizeChoiceTitle(option?.title) === selectedTitle);
+
+    if (!matchedOption) {
+        return null;
+    }
+
+    return Number(matchedOption.price || 0);
 };
 
 const orderSchema = new mongoose.Schema(
@@ -40,6 +75,15 @@ const orderSchema = new mongoose.Schema(
                         },
                     }
                 ],
+                option: {
+                    title: {
+                        type: String,
+                    },
+                    price: {
+                        type: Number,
+                        default: 0,
+                    },
+                },
                 count: {
                     type: Number,
                     required: [true, 'يرجى إدخال عدد الوجبات'],
@@ -99,6 +143,10 @@ const orderSchema = new mongoose.Schema(
             type: Number,
             default: 0
         },
+        serviceFees: {
+            type: Number,
+            default: SERVICE_FEES
+        },
         totalPriceBeforeDiscount: {
             type: Number,
             default: 0
@@ -153,10 +201,33 @@ orderSchema.pre('save', async function (next) {
             // Tags price × count
             let tagsPrice = 0;
             if (el.tags && el.tags.length > 0) {
-                tagsPrice = el.tags.reduce((acc, tag) => acc + (tag.price || 0), 0) * el.count;
+                for (const tag of el.tags) {
+                    const backendTagPrice = getMealTagPrice(el.Id, tag);
+
+                    if (backendTagPrice === null) {
+                        return next(new AppError('خيار الإضافة غير صالح لهذه الوجبة.', 400));
+                    }
+
+                    tag.price = backendTagPrice;
+                    tagsPrice += backendTagPrice;
+                }
+
+                tagsPrice *= el.count;
             }
 
-            total += basePrice + tagsPrice;
+            let optionPrice = 0;
+            if (el.option?.title) {
+                const backendOptionPrice = getMealOptionPrice(el.Id, el.option);
+
+                if (backendOptionPrice === null) {
+                    return next(new AppError('خيار الوجبة غير صالح.', 400));
+                }
+
+                el.option.price = backendOptionPrice;
+                optionPrice = backendOptionPrice * el.count;
+            }
+
+            total += basePrice + tagsPrice + optionPrice;
         }
     }
 
@@ -169,7 +240,8 @@ orderSchema.pre('save', async function (next) {
     let couponDiscount = Number(this.couponPercentage || 0) / 100;
     const couponDiscountAmount = totalAfterRestaurantDiscount * couponDiscount;
 
-    this.totalPrice = roundPriceToNearestStep(totalAfterRestaurantDiscount - couponDiscountAmount, 250) + SERVICE_FEES;
+    this.serviceFees = SERVICE_FEES;
+    this.totalPrice = roundPriceToNearestStep(totalAfterRestaurantDiscount - couponDiscountAmount, 250) + this.serviceFees;
 
     next();
 });

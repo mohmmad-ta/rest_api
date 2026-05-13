@@ -6,6 +6,7 @@ const Restaurant = require("../models/auth/restaurantModel");
 const mongoose = require("mongoose");
 const multer = require("multer");
 const sharp = require("sharp");
+const qs = require("qs");
 
 const MAX_IMAGE_SIZE_BYTES = 2 * 1024 * 1024;
 
@@ -54,6 +55,64 @@ exports.resizeTourImages = catchAsync(async (req, res, next) => {
         .toFile(`public/images/meals/${fileName}`);
     next();
 });
+
+const parseJsonArrayField = (value) => {
+    if (Array.isArray(value)) {
+        return value;
+    }
+
+    if (value && typeof value === 'object') {
+        return Object.values(value);
+    }
+
+    if (typeof value !== 'string') {
+        return [];
+    }
+
+    try {
+        const parsedValue = JSON.parse(value);
+
+        if (Array.isArray(parsedValue)) {
+            return parsedValue;
+        }
+
+        if (parsedValue && typeof parsedValue === 'object') {
+            return Object.values(parsedValue);
+        }
+    } catch (error) {
+        return [];
+    }
+
+    return [];
+};
+
+const normalizePricedList = (value) =>
+    parseJsonArrayField(value)
+        .map((item) => ({
+            title: String(item?.title || '').trim(),
+            price: Number(item?.price || 0),
+        }))
+        .filter((item) => item.title || item.price !== 0);
+
+const normalizeNotesList = (value) =>
+    parseJsonArrayField(value)
+        .map((item) => ({
+            title: String(item?.title || '').trim(),
+        }))
+        .filter((item) => item.title);
+
+exports.normalizeMealBody = (req, res, next) => {
+    const parsedBody = qs.parse(req.body || {});
+
+    req.body = {
+        ...parsedBody,
+        tags: normalizePricedList(parsedBody.tags),
+        options: normalizePricedList(parsedBody.options),
+        notes: normalizeNotesList(parsedBody.notes),
+    };
+
+    next();
+};
 
 
 exports.getAllRestaurant = factory.getAll(Restaurant);

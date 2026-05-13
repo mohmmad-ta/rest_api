@@ -46,6 +46,17 @@ const mealSchema = new mongoose.Schema(
                 },
             }
         ],
+        options: [
+            {
+                title: {
+                    type: String,
+                },
+                price: {
+                    type: Number,
+                    default: 0,
+                },
+            }
+        ],
         createdAt: {
             type: Date,
             default: Date.now(),

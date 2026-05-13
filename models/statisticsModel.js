@@ -4,15 +4,38 @@ const DELIVERED_STATUS = '4';
 const ON_THE_WAY_STATUS = '3';
 const PENDING_STATUS = '1';
 const PROCESSING_STATUS = '2';
+const REJECTED_STATUS = '0';
+const SERVICE_FEES = 250;
 
 const toObjectId = (value) => new mongoose.Types.ObjectId(value);
 
-const createOrderMetricsGroup = () => ({
-    _id: null,
+const createServiceFeesExpression = () => ({ $ifNull: ['$serviceFees', SERVICE_FEES] });
+
+const createRestaurantRevenueExpression = () => {
+    const serviceFees = createServiceFeesExpression();
+
+    return {
+        $cond: [
+            { $gt: ['$totalPrice', serviceFees] },
+            { $subtract: ['$totalPrice', serviceFees] },
+            0
+        ]
+    };
+};
+
+const createPayableOrderMatch = () => ({
+    status: { $ne: REJECTED_STATUS }
+});
+
+const createOrderMetricsFields = () => ({
     totalOrders: { $sum: 1 },
     totalRevenue: { $sum: '$totalPrice' },
     totalRevenueAfterDiscount: { $sum: '$totalPrice' },
     totalRevenueBeforeDiscount: { $sum: '$totalPriceBeforeDiscount' },
+    totalServiceFees: { $sum: createServiceFeesExpression() },
+    restaurantRevenue: {
+        $sum: createRestaurantRevenueExpression()
+    },
     pendingOrders: {
         $sum: {
             $cond: [{ $eq: ['$status', PENDING_STATUS] }, 1, 0]
@@ -35,7 +58,13 @@ const createOrderMetricsGroup = () => ({
     }
 });
 
+const createOrderMetricsGroup = () => ({
+    _id: null,
+    ...createOrderMetricsFields()
+});
+
 const createDateMatch = (startDate, endDate) => ({
+    ...createPayableOrderMatch(),
     createdAt: {
         $gte: startDate,
         $lt: endDate
@@ -53,6 +82,8 @@ const createDefaultMetrics = (label = null) => ({
     totalRevenue: 0,
     totalRevenueAfterDiscount: 0,
     totalRevenueBeforeDiscount: 0,
+    totalServiceFees: 0,
+    restaurantRevenue: 0,
     pendingOrders: 0,
     processingOrders: 0,
     onTheWayOrders: 0,
@@ -62,6 +93,10 @@ const createDefaultMetrics = (label = null) => ({
 module.exports = {
     DELIVERED_STATUS,
     ON_THE_WAY_STATUS,
+    REJECTED_STATUS,
+    SERVICE_FEES,
+    createPayableOrderMatch,
+    createOrderMetricsFields,
     createOrderMetricsGroup,
     createDateMatch,
     createRestaurantMatch,
