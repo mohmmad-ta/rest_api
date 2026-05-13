@@ -28,6 +28,10 @@ const mealSchema = new mongoose.Schema(
             type: String,
             required: [true, 'يجب إدخال صورة للوجبة']
         },
+        active: {
+            type: Boolean,
+            default: true,
+        },
         notes: [
             {
                 title: {
@@ -86,6 +90,10 @@ mealSchema.pre('save', function(next) {
 });
 
 mealSchema.pre(/^find/, function(next) {
+    if (!this.getOptions().includeInactive) {
+        this.find({ active: { $ne: false } });
+    }
+
     this.populate({
         path: 'category',
         select: '-__v -createdAt -updatedAt'

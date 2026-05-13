@@ -207,7 +207,7 @@ exports.createOrder = catchAsync(async (req, res, next)=>{
 
     if (distanceKm > MAX_RESTAURANT_ORDER_RADIUS_KM) {
         return next(
-            new AppError(`موقع العميل خارج نطاق توصيل المطعم. الحد الأقصى ${MAX_RESTAURANT_ORDER_RADIUS_KM} كم.`, 400)
+            new AppError(`نعتذر، خدمة التوصيل غير متاحة لهذه المنطقة حالياً، ونعمل على توفيرها قريباً. شكراً لانتظاركم.`, 400)
         );
     }
 

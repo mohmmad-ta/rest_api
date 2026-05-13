@@ -174,7 +174,8 @@ orderSchema.pre(/^find/, function(next) {
         select: '-__v -location -role'
     }).populate({
         path: 'item.Id',
-        select: '-__v -role'
+        select: '-__v -role',
+        options: { includeInactive: true }
     }).populate({
         path: 'deliveryId',
         select: '-__v -role'
@@ -188,12 +189,23 @@ orderSchema.pre('save', async function (next) {
     if (!this.isModified('item') && !this.isModified('couponPercentage')) return next();
 
     // Populate meals and restaurant to get price and discount
-    await this.populate('item.Id');
+    await this.populate({
+        path: 'item.Id',
+        options: { includeInactive: true }
+    });
     await this.populate('restaurantId'); // For discount
 
     let total = 0;
 
     for (const el of this.item) {
+        if (!el?.Id) {
+            return next(new AppError('هذه الوجبة غير موجودة أو غير متاحة للطلب.', 400));
+        }
+
+        if (el.Id.active === false) {
+            return next(new AppError('هذه الوجبة غير متاحة للطلب حالياً.', 400));
+        }
+
         if (el?.Id?.price) {
             // Base meal price × count
             let basePrice = el.Id.price * el.count;

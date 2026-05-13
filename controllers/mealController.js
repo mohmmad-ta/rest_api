@@ -3,6 +3,8 @@ const catchAsync = require('./../utils/catchAsync');
 const factory = require('./handlerFactory');
 const AppError = require('./../utils/appError');
 const Restaurant = require("../models/auth/restaurantModel");
+const fs = require("fs");
+const path = require("path");
 const mongoose = require("mongoose");
 const multer = require("multer");
 const sharp = require("sharp");
@@ -131,8 +133,95 @@ exports.getMeal = catchAsync(async (req, res, next) => {
         data,
     });
 });
-exports.updateMeal = factory.updateOne(Meal);
-exports.deleteMeal = factory.deleteOne(Meal);
+
+exports.getRestaurantMeal = catchAsync(async (req, res, next) => {
+    const data = await Meal.findOne({
+        _id: req.params.id,
+        restaurantId: req.user.id,
+    })
+        .setOptions({ includeInactive: true })
+        .populate({
+            path: 'restaurantId',
+            select: 'name workingHours active',
+        });
+
+    if (!data) {
+        return next(new AppError('No document found with that ID', 404));
+    }
+
+    res.status(200).json({
+        status: 'success',
+        data,
+    });
+});
+
+exports.updateMealActive = catchAsync(async (req, res, next) => {
+    const active = Boolean(req.body.active);
+
+    const data = await Meal.findOneAndUpdate(
+        {
+            _id: req.params.id,
+            restaurantId: req.user.id,
+        },
+        { active },
+        {
+            new: true,
+            runValidators: true,
+        }
+    ).setOptions({ includeInactive: true });
+
+    if (!data) {
+        return next(new AppError('No document found with that ID', 404));
+    }
+
+    res.status(200).json({
+        status: 'success',
+        data,
+    });
+});
+exports.updateMeal = catchAsync(async (req, res, next) => {
+    const data = await Meal.findOneAndUpdate(
+        {
+            _id: req.params.id,
+            restaurantId: req.user.id,
+        },
+        req.body,
+        {
+            new: true,
+            runValidators: true,
+        }
+    ).setOptions({ includeInactive: true });
+
+    if (!data) {
+        return next(new AppError('No document found with that ID', 404));
+    }
+
+    res.status(200).json({
+        status: 'success',
+        data,
+    });
+});
+exports.deleteMeal = catchAsync(async (req, res, next) => {
+    const data = await Meal.findOneAndDelete({
+        _id: req.params.id,
+        restaurantId: req.user.id,
+    }).setOptions({ includeInactive: true });
+
+    if (!data) {
+        return next(new AppError('No document found with that ID', 404));
+    }
+
+    if (data?.image && data.image.includes('/public/')) {
+        const imageRelativePath = data.image.split("/public/")[1];
+        const imagePath = path.join(__dirname, "..", "public", imageRelativePath);
+
+        if (fs.existsSync(imagePath)) {
+            fs.unlinkSync(imagePath);
+        }
+    }
+
+    res.status(204).json({ status: 'success', data: null });
+});
 exports.createMeal = factory.createOne(Meal);
 
 exports.getRandomRestaurants = catchAsync(async (req, res) => {
@@ -177,17 +266,30 @@ exports.getRandomRestaurants = catchAsync(async (req, res) => {
 
 
 exports.getAllMyMeals = async (req, res, next) => {
-    const data = await Restaurant.findById(req.user.id).populate('meal');
+    const data = await Meal.find({ restaurantId: req.user.id })
+        .setOptions({ includeInactive: true })
+        .sort({ createdAt: -1 });
+
     res.status(200).json({
         status: 'success',
-        data: data.meal
+        data
     });
 };
 exports.getRestaurantMeals = async (req, res, next) => {
-    const data = await Restaurant.findById(req.params.id).populate('meal');
+    const data = await Restaurant.findById(req.params.id).lean();
+
+    if (!data) {
+        return next(new AppError('No document found with that ID', 404));
+    }
+
+    const meal = await Meal.find({ restaurantId: req.params.id }).sort({ createdAt: -1 });
+
     res.status(200).json({
         status: 'success',
-        data: data
+        data: {
+            ...data,
+            meal,
+        }
     });
 };
 exports.getRestaurantSearch = catchAsync(async (req, res, next) => {
