@@ -181,11 +181,15 @@ exports.aliasTopTours = (req, res, next) => {
 
 exports.createOrder = catchAsync(async (req, res, next)=>{
     const restaurant = await Restaurant.findById(req.body.restaurantId).select(
-        'location workingHours discount +couponCode +couponPercentage +couponExpiresAt'
-    );
+        'location workingHours discount active +couponCode +couponPercentage +couponExpiresAt'
+    ).setOptions({ includeInactive: true });
 
     if (!restaurant) {
         return next(new AppError('المطعم غير موجود.', 404));
+    }
+
+    if (restaurant.active === false) {
+        return next(new AppError('هذا المطعم غير مفعل حالياً ولا يمكن استقبال الطلبات.', 400));
     }
 
     if (!isRestaurantOpenNow(restaurant.workingHours)) {
@@ -283,11 +287,15 @@ exports.createOrder = catchAsync(async (req, res, next)=>{
 
 exports.checkCouponCode = catchAsync(async (req, res, next) => {
     const restaurant = await Restaurant.findById(req.body.restaurantId).select(
-        '+couponCode +couponPercentage +couponExpiresAt'
-    );
+        'active +couponCode +couponPercentage +couponExpiresAt'
+    ).setOptions({ includeInactive: true });
 
     if (!restaurant) {
         return next(new AppError('المطعم غير موجود.', 404));
+    }
+
+    if (restaurant.active === false) {
+        return next(new AppError('هذا المطعم غير مفعل حالياً.', 400));
     }
 
     const enteredCouponCode = String(req.body?.couponCode || '').trim().toUpperCase();

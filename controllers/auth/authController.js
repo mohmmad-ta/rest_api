@@ -184,11 +184,18 @@ const respondWithAdminLoginOtpChallenge = (res, user) => {
 };
 
 const respondWithInactiveRestaurantAccount = (res, user, message = 'هذا الحساب غير مفعل بعد. يرجى انتظار موافقة الإدارة.') => {
+    const token = signToken(user._id);
+    const cookieOptions = buildJwtCookieOptions();
+    res.cookie('jwt', token, cookieOptions);
+    user.password = undefined;
+
     res.status(200).json({
         status: 'success',
+        token,
         pendingApproval: true,
         message,
         data: {
+            user,
             role: user.role,
             phone: user.phone,
             active: false,
@@ -794,7 +801,13 @@ exports.protect = Model => catchAsync(async (req, res, next) => {
         return next(new AppError('أنت غير مسجل الدخول! يرجى تسجيل الدخول للوصول.', 401));
     }
     const decoded = await promisify(jwt.verify)(token, process.env.JWT_SECRET);
-    const currentUser = await Model.findById(decoded.id);
+    const currentUserQuery = Model.findById(decoded.id);
+
+    if (Model.modelName === 'Restaurant') {
+        currentUserQuery.setOptions({ includeInactive: true });
+    }
+
+    const currentUser = await currentUserQuery;
     if (!currentUser) {
         return next(new AppError('المستخدم المرتبط بهذا التوكن لم يعد موجودًا.', 401));
     }
@@ -816,7 +829,13 @@ exports.protectAnyRole = catchAsync(async (req, res, next) => {
     let currentUser = null;
 
     for (const Model of models) {
-        currentUser = await Model.findById(decoded.id);
+        const currentUserQuery = Model.findById(decoded.id);
+
+        if (Model.modelName === 'Restaurant') {
+            currentUserQuery.setOptions({ includeInactive: true });
+        }
+
+        currentUser = await currentUserQuery;
         if (currentUser) {
             break;
         }
@@ -844,7 +863,13 @@ exports.checkToken = catchAsync(async (req, res, next) => {
     let currentUser = null;
 
     for (const Model of models) {
-        currentUser = await Model.findById(decoded.id);
+        const currentUserQuery = Model.findById(decoded.id);
+
+        if (Model.modelName === 'Restaurant') {
+            currentUserQuery.setOptions({ includeInactive: true });
+        }
+
+        currentUser = await currentUserQuery;
         if (currentUser) break;
     }
 

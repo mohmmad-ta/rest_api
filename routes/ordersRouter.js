@@ -6,10 +6,18 @@ const Order = require('./../models/orderModel');
 const User = require('./../models/auth/userModel');
 const Delivery = require('./../models/auth/deliveryModel');
 const Restaurant = require('./../models/auth/restaurantModel');
+const { expireOldPendingOrders } = require('../utils/orderExpiry');
 
 const router = Router();
 
-
+router.use(async (req, res, next) => {
+    try {
+        await expireOldPendingOrders();
+        next();
+    } catch (error) {
+        next(error);
+    }
+});
 
 router.get('/getOneOrder/:id', protectAnyRole, getOrder);
 // user Controller

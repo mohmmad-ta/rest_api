@@ -47,6 +47,7 @@ const filterObj = (obj, ...allowedFields) => {
 exports.getMeRestaurant = async (req, res, next) => {
     req.params.id = req.user.id;
     const user = await Restaurant.findById(req.params.id)
+        .setOptions({ includeInactive: true })
         .select('+couponCode +couponPercentage +couponExpiresAt')
         .populate('delivery')
     res.status(200).json({
@@ -153,7 +154,9 @@ exports.updateMeRestaurant = catchAsync(async (req, res, next) => {
             new: true,
             runValidators: true
         }
-    ).select('+couponCode +couponPercentage +couponExpiresAt');
+    )
+        .setOptions({ includeInactive: true })
+        .select('+couponCode +couponPercentage +couponExpiresAt');
 
     res.status(200).json({
         status: 'success',
@@ -164,7 +167,8 @@ exports.updateMeRestaurant = catchAsync(async (req, res, next) => {
 });
 
 exports.deleteMeRestaurant = catchAsync(async (req, res, next) => {
-    await Restaurant.findByIdAndUpdate(req.user.id, { deleted: true });
+    await Restaurant.findByIdAndUpdate(req.user.id, { deleted: true })
+        .setOptions({ includeInactive: true });
 
     res.status(204).json({
         status: 'success',

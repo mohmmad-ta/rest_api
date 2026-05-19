@@ -10,6 +10,7 @@ const http = require('http');
 const mongoose = require("mongoose");
 const { initWebSocket } = require('../controllers/wsController');
 const ensureAdminAccount = require('../utils/ensureAdminAccount');
+const { startOrderExpiryJob } = require('../utils/orderExpiry');
 /**
  * Get port from environment and store in Express.
  */
@@ -31,6 +32,7 @@ const server = http.createServer(app);
 mongoose.connect(DB).then(async () => {
   console.log('Connected to MongoDB database.');
   await ensureAdminAccount();
+  startOrderExpiryJob();
 }).catch((error) => {
   console.error('Error connecting to MongoDB database:', error);
 });

@@ -159,6 +159,7 @@ const orderSchema = new mongoose.Schema(
 );
 
 orderSchema.index({ restaurantId: 1, restaurantOrderDay: 1, restaurantOrderNumber: -1 });
+orderSchema.index({ status: 1, createdAt: 1 });
 
 // Auto populate relations when finding
 orderSchema.pre(/^find/, function(next) {
