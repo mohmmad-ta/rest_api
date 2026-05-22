@@ -5,6 +5,8 @@ const Delivery = require('../models/auth/deliveryModel');
 const Restaurant = require('../models/auth/restaurantModel');
 const Meal = require('../models/mealModel');
 const Category = require('../models/categoryModel');
+const ServiceFeeCollection = require('../models/serviceFeeCollectionModel');
+const AppError = require('../utils/appError');
 const {
     createOrderMetricsGroup,
     createOrderMetricsFields,
@@ -60,6 +62,31 @@ const formatMonthKey = (date) => {
     const shiftedDate = toStatisticsDate(date);
 
     return `${shiftedDate.getUTCFullYear()}-${String(shiftedDate.getUTCMonth() + 1).padStart(2, '0')}`;
+};
+
+const getCollectionMonthRange = (monthKey) => {
+    if (!monthKey) {
+        const start = startOfMonth();
+
+        return {
+            key: formatMonthKey(start),
+            start,
+            end: addMonths(start, 1)
+        };
+    }
+
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(monthKey))) {
+        return null;
+    }
+
+    const [year, month] = String(monthKey).split('-').map(Number);
+    const start = new Date(Date.UTC(year, month - 1, 1) - STATISTICS_TIMEZONE_OFFSET_MS);
+
+    return {
+        key: formatMonthKey(start),
+        start,
+        end: addMonths(start, 1)
+    };
 };
 
 const getSingleMetrics = async (match, label = null) => {
@@ -184,6 +211,172 @@ const getRestaurantMonthlySeries = async (restaurantId, months = 6) => {
             onTheWayOrders: row?.onTheWayOrders || 0,
             deliveredOrders: row?.deliveredOrders || 0
         };
+    });
+};
+
+const getServiceFeeCollectionRows = async (monthRange) => {
+    const orderRows = await Order.aggregate([
+        {
+            $match: createDateMatch(monthRange.start, monthRange.end)
+        },
+        {
+            $group: {
+                _id: '$restaurantId',
+                ...createOrderMetricsFields()
+            }
+        },
+        {
+            $lookup: {
+                from: 'restaurants',
+                localField: '_id',
+                foreignField: '_id',
+                as: 'restaurant'
+            }
+        },
+        {
+            $unwind: {
+                path: '$restaurant',
+                preserveNullAndEmptyArrays: true
+            }
+        },
+        {
+            $project: {
+                _id: 0,
+                restaurantId: '$_id',
+                restaurantName: '$restaurant.name',
+                restaurantPhone: '$restaurant.phone',
+                restaurantActive: '$restaurant.active',
+                totalOrders: 1,
+                totalRevenue: 1,
+                totalServiceFees: 1,
+                restaurantRevenue: 1,
+                deliveredOrders: 1
+            }
+        },
+        {
+            $sort: {
+                totalServiceFees: -1,
+                totalOrders: -1
+            }
+        }
+    ]);
+
+    const collections = await ServiceFeeCollection.find({
+        month: monthRange.key,
+        restaurantId: { $in: orderRows.map((row) => row.restaurantId) }
+    }).lean();
+    const collectionMap = new Map(collections.map((item) => [String(item.restaurantId), item]));
+
+    return orderRows.map((row) => {
+        const collection = collectionMap.get(String(row.restaurantId));
+
+        return {
+            ...row,
+            collectionStatus: collection?.status || 'pending',
+            collectedAt: collection?.collectedAt || null
+        };
+    });
+};
+
+const getServiceFeeCollectionSummary = (rows) => {
+    return rows.reduce(
+        (summary, row) => {
+            const serviceFees = Number(row.totalServiceFees || 0);
+            const isCollected = row.collectionStatus === 'collected';
+
+            summary.totalRestaurants += 1;
+            summary.totalOrders += Number(row.totalOrders || 0);
+            summary.totalServiceFees += serviceFees;
+            summary.collectedServiceFees += isCollected ? serviceFees : 0;
+            summary.pendingServiceFees += isCollected ? 0 : serviceFees;
+            summary.collectedRestaurants += isCollected ? 1 : 0;
+            summary.pendingRestaurants += isCollected ? 0 : 1;
+
+            return summary;
+        },
+        {
+            totalRestaurants: 0,
+            totalOrders: 0,
+            totalServiceFees: 0,
+            collectedServiceFees: 0,
+            pendingServiceFees: 0,
+            collectedRestaurants: 0,
+            pendingRestaurants: 0
+        }
+    );
+};
+
+const getServiceFeeMonthlyCollectionSeries = async (anchorMonthStart, months = 12) => {
+    const startDate = addMonths(anchorMonthStart, -(months - 1));
+    const endDate = addMonths(anchorMonthStart, 1);
+
+    const orderRows = await Order.aggregate([
+        {
+            $match: createDateMatch(startDate, endDate)
+        },
+        {
+            $group: {
+                _id: {
+                    month: {
+                        $dateToString: {
+                            format: '%Y-%m',
+                            date: '$createdAt',
+                            timezone: STATISTICS_TIMEZONE
+                        }
+                    },
+                    restaurantId: '$restaurantId'
+                },
+                ...createOrderMetricsFields()
+            }
+        }
+    ]);
+
+    const monthKeys = Array.from({ length: months }, (_, index) => {
+        return formatMonthKey(addMonths(startDate, index));
+    });
+    const collections = await ServiceFeeCollection.find({
+        month: { $in: monthKeys },
+        restaurantId: { $in: orderRows.map((row) => row._id.restaurantId) }
+    }).lean();
+    const collectionMap = new Map(
+        collections.map((collection) => [`${collection.month}:${String(collection.restaurantId)}`, collection])
+    );
+    const rowsByMonth = new Map(monthKeys.map((month) => [month, []]));
+
+    orderRows.forEach((row) => {
+        const month = row._id.month;
+
+        if (rowsByMonth.has(month)) {
+            rowsByMonth.get(month).push(row);
+        }
+    });
+
+    return monthKeys.map((month) => {
+        const rows = rowsByMonth.get(month) || [];
+
+        return rows.reduce(
+            (summary, row) => {
+                const key = `${month}:${String(row._id.restaurantId)}`;
+                const isCollected = collectionMap.get(key)?.status === 'collected';
+                const serviceFees = Number(row.totalServiceFees || 0);
+
+                summary.totalRestaurants += 1;
+                summary.totalOrders += Number(row.totalOrders || 0);
+                summary.totalServiceFees += serviceFees;
+                summary.collectedServiceFees += isCollected ? serviceFees : 0;
+                summary.pendingServiceFees += isCollected ? 0 : serviceFees;
+
+                return summary;
+            },
+            {
+                month,
+                totalRestaurants: 0,
+                totalOrders: 0,
+                totalServiceFees: 0,
+                collectedServiceFees: 0,
+                pendingServiceFees: 0
+            }
+        );
     });
 };
 
@@ -314,6 +507,86 @@ exports.getAdminOverviewStatistics = catchAsync(async (req, res) => {
                 month: monthStats
             },
             topRestaurants: restaurants
+        }
+    });
+});
+
+exports.getAdminServiceFeeCollections = catchAsync(async (req, res, next) => {
+    const monthRange = getCollectionMonthRange(req.query.month);
+
+    if (!monthRange) {
+        return next(new AppError('Collection month must use YYYY-MM format.', 400));
+    }
+
+    const [restaurants, monthly] = await Promise.all([
+        getServiceFeeCollectionRows(monthRange),
+        getServiceFeeMonthlyCollectionSeries(monthRange.start)
+    ]);
+
+    res.status(200).json({
+        status: 'success',
+        data: {
+            month: monthRange.key,
+            summary: getServiceFeeCollectionSummary(restaurants),
+            monthly,
+            restaurants
+        }
+    });
+});
+
+exports.updateAdminServiceFeeCollection = catchAsync(async (req, res, next) => {
+    const monthRange = getCollectionMonthRange(req.body.month);
+    const status = String(req.body.status || '').trim();
+
+    if (!monthRange) {
+        return next(new AppError('Collection month must use YYYY-MM format.', 400));
+    }
+
+    if (!['pending', 'collected'].includes(status)) {
+        return next(new AppError('Collection status must be pending or collected.', 400));
+    }
+
+    const restaurant = await Restaurant.findById(req.params.restaurantId)
+        .setOptions({ includeInactive: true })
+        .select('_id');
+
+    if (!restaurant) {
+        return next(new AppError('Restaurant was not found.', 404));
+    }
+
+    const collectionUpdate = status === 'collected'
+        ? {
+            $set: {
+                status,
+                collectedAt: new Date()
+            }
+        }
+        : {
+            $set: { status },
+            $unset: { collectedAt: 1 }
+        };
+
+    const collection = await ServiceFeeCollection.findOneAndUpdate(
+        {
+            restaurantId: restaurant._id,
+            month: monthRange.key
+        },
+        collectionUpdate,
+        {
+            new: true,
+            runValidators: true,
+            setDefaultsOnInsert: true,
+            upsert: true
+        }
+    );
+
+    res.status(200).json({
+        status: 'success',
+        data: {
+            restaurantId: collection.restaurantId,
+            month: collection.month,
+            collectionStatus: collection.status,
+            collectedAt: collection.collectedAt || null
         }
     });
 });

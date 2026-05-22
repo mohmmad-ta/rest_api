@@ -34,7 +34,7 @@ exports.authLoginLimiter = createLimiter({
 
 exports.authSignupLimiter = createLimiter({
     windowMs: 60 * 60 * 1000,
-    max: 5,
+    max: 15,
     skipSuccessfulRequests: true,
     message: "تم تجاوز عدد محاولات إنشاء الحساب. حاول مرة أخرى بعد ساعة.",
 });

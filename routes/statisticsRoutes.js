@@ -1,9 +1,11 @@
 const { Router } = require('express');
 const {
     getAdminOverviewStatistics,
+    getAdminServiceFeeCollections,
     getAdminRestaurantsStatistics,
     getAdminRestaurantStatistics,
-    getRestaurantStatistics
+    getRestaurantStatistics,
+    updateAdminServiceFeeCollection
 } = require('../controllers/statisticsController');
 const { protect, restrictTo } = require('../controllers/auth/authController');
 const Admin = require('../models/auth/adminModel');
@@ -23,6 +25,20 @@ router.get(
     protect(Admin),
     restrictTo('admin'),
     getAdminRestaurantsStatistics
+);
+
+router.get(
+    '/admin/service-fee-collections',
+    protect(Admin),
+    restrictTo('admin'),
+    getAdminServiceFeeCollections
+);
+
+router.patch(
+    '/admin/service-fee-collections/:restaurantId',
+    protect(Admin),
+    restrictTo('admin'),
+    updateAdminServiceFeeCollection
 );
 
 router.get(
