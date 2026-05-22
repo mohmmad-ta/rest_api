@@ -14,6 +14,7 @@ const {
     createDateMatch,
     createRestaurantMatch,
     createDefaultMetrics,
+    createDeliveredMetricExpression,
     createPayableOrderMatch,
     DELIVERED_STATUS,
     toObjectId
@@ -688,9 +689,9 @@ exports.getAdminRestaurantsStatistics = catchAsync(async (req, res) => {
                         $group: {
                             _id: '$restaurantId',
                             todayOrders: { $sum: 1 },
-                            todayRevenue: { $sum: '$totalPrice' },
-                            todayRevenueAfterDiscount: { $sum: '$totalPrice' },
-                            todayRevenueBeforeDiscount: { $sum: '$totalPriceBeforeDiscount' }
+                            todayRevenue: { $sum: createDeliveredMetricExpression('$totalPrice') },
+                            todayRevenueAfterDiscount: { $sum: createDeliveredMetricExpression('$totalPrice') },
+                            todayRevenueBeforeDiscount: { $sum: createDeliveredMetricExpression('$totalPriceBeforeDiscount') }
                         }
                     }
                 ],
@@ -700,9 +701,9 @@ exports.getAdminRestaurantsStatistics = catchAsync(async (req, res) => {
                         $group: {
                             _id: '$restaurantId',
                             monthOrders: { $sum: 1 },
-                            monthRevenue: { $sum: '$totalPrice' },
-                            monthRevenueAfterDiscount: { $sum: '$totalPrice' },
-                            monthRevenueBeforeDiscount: { $sum: '$totalPriceBeforeDiscount' }
+                            monthRevenue: { $sum: createDeliveredMetricExpression('$totalPrice') },
+                            monthRevenueAfterDiscount: { $sum: createDeliveredMetricExpression('$totalPrice') },
+                            monthRevenueBeforeDiscount: { $sum: createDeliveredMetricExpression('$totalPriceBeforeDiscount') }
                         }
                     }
                 ]

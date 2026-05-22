@@ -23,18 +23,26 @@ const createRestaurantRevenueExpression = () => {
     };
 };
 
+const createDeliveredMetricExpression = (expression) => ({
+    $cond: [
+        { $eq: ['$status', DELIVERED_STATUS] },
+        expression,
+        0
+    ]
+});
+
 const createPayableOrderMatch = () => ({
     status: { $ne: REJECTED_STATUS }
 });
 
 const createOrderMetricsFields = () => ({
     totalOrders: { $sum: 1 },
-    totalRevenue: { $sum: '$totalPrice' },
-    totalRevenueAfterDiscount: { $sum: '$totalPrice' },
-    totalRevenueBeforeDiscount: { $sum: '$totalPriceBeforeDiscount' },
-    totalServiceFees: { $sum: createServiceFeesExpression() },
+    totalRevenue: { $sum: createDeliveredMetricExpression('$totalPrice') },
+    totalRevenueAfterDiscount: { $sum: createDeliveredMetricExpression('$totalPrice') },
+    totalRevenueBeforeDiscount: { $sum: createDeliveredMetricExpression('$totalPriceBeforeDiscount') },
+    totalServiceFees: { $sum: createDeliveredMetricExpression(createServiceFeesExpression()) },
     restaurantRevenue: {
-        $sum: createRestaurantRevenueExpression()
+        $sum: createDeliveredMetricExpression(createRestaurantRevenueExpression())
     },
     pendingOrders: {
         $sum: {
@@ -95,6 +103,7 @@ module.exports = {
     ON_THE_WAY_STATUS,
     REJECTED_STATUS,
     SERVICE_FEES,
+    createDeliveredMetricExpression,
     createPayableOrderMatch,
     createOrderMetricsFields,
     createOrderMetricsGroup,
