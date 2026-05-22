@@ -85,6 +85,7 @@ function sendNotificationToUser(userId, order, type, options = {}) {
           status: order?.status || null,
           screen: options.screen || 'notification',
           openStatusOrder: Boolean(options.openStatusOrder),
+          ...(options.data || {}),
         };
 
         if (normalizedUserId && options.role && options.persistNotification !== false) {

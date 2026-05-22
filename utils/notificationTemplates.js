@@ -87,6 +87,20 @@ const buildNotificationTemplate = (type, order) => {
             body: 'The order has been completed successfully.',
             bodyAr: 'تم إنهاء الطلب بنجاح.',
         },
+        'service-fee-collection-collected': {
+            key: 'service-fee-collection-collected',
+            title: 'Service fees collected',
+            titleAr: 'تم تحصيل رسوم الخدمة',
+            body: 'Admin marked your monthly service fees as collected.',
+            bodyAr: 'أكدت الإدارة تحصيل رسوم الخدمة الشهرية.',
+        },
+        'service-fee-collection-pending': {
+            key: 'service-fee-collection-pending',
+            title: 'Service fees collection updated',
+            titleAr: 'تم تحديث تحصيل رسوم الخدمة',
+            body: 'Your monthly service fees were returned to pending collection.',
+            bodyAr: 'تم إرجاع رسوم الخدمة الشهرية إلى حالة انتظار التحصيل.',
+        },
     };
 
     return templates[type] || {
