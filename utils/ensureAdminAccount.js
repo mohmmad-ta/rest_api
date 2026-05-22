@@ -1,39 +1,85 @@
 const Admin = require("../models/auth/adminModel");
 
-module.exports = async () => {
-    const adminUserID = process.env.ADMIN_USER_ID;
-    const adminPhone = process.env.ADMIN_PHONE;
-    const adminPassword = process.env.ADMIN_PASSWORD;
+const isStrongBootstrapPassword = (password) =>
+    password &&
+    password !== "change_this_admin_password" &&
+    password.length >= 12;
 
-    if (!adminUserID || !adminPhone || !adminPassword) {
-        console.warn("Admin bootstrap skipped: ADMIN_USER_ID, ADMIN_PHONE or ADMIN_PASSWORD is missing.");
+const parseAdditionalAdminAccounts = () => {
+    const rawAccounts = process.env.ADMIN_ADDITIONAL_ACCOUNTS_JSON;
+
+    if (!rawAccounts) {
+        return [];
+    }
+
+    try {
+        const accounts = JSON.parse(rawAccounts);
+
+        if (!Array.isArray(accounts)) {
+            console.warn("Additional admin bootstrap skipped: ADMIN_ADDITIONAL_ACCOUNTS_JSON must be a JSON array.");
+            return [];
+        }
+
+        return accounts;
+    } catch (error) {
+        console.warn("Additional admin bootstrap skipped: ADMIN_ADDITIONAL_ACCOUNTS_JSON is not valid JSON.");
+        return [];
+    }
+};
+
+const ensureBootstrapAdmin = async ({ userID, phone, password }, source) => {
+    if (!userID || !phone || !password) {
+        console.warn(`Admin bootstrap skipped from ${source}: userID, phone or password is missing.`);
         return;
     }
 
-    if (adminPassword === "change_this_admin_password" || adminPassword.length < 12) {
-        console.warn("Admin bootstrap skipped: ADMIN_PASSWORD is too weak or still uses the placeholder value.");
+    if (!isStrongBootstrapPassword(password)) {
+        console.warn(`Admin bootstrap skipped from ${source}: password is too weak or still uses the placeholder value.`);
         return;
     }
 
-    const existingAdmin = await Admin.findOne({ userID: adminUserID }).setOptions({
+    const existingAdmin = await Admin.findOne({ userID }).setOptions({
         includeInactive: true,
     });
 
     if (existingAdmin) {
-        if (existingAdmin.phone !== adminPhone) {
-            existingAdmin.phone = adminPhone;
+        if (existingAdmin.phone !== phone) {
+            existingAdmin.phone = phone;
             await existingAdmin.save({ validateBeforeSave: false });
-            console.log("Admin phone updated from environment configuration.");
+            console.log(`Admin phone updated from ${source}.`);
         }
         return;
     }
 
     await Admin.create({
-        userID: adminUserID,
-        phone: adminPhone,
-        password: adminPassword,
-        passwordConfirm: adminPassword,
+        userID,
+        phone,
+        password,
+        passwordConfirm: password,
     });
 
-    console.log("Admin account created from environment configuration.");
+    console.log(`Admin account ${userID} created from ${source}.`);
+};
+
+module.exports = async () => {
+    const primaryAdmin = {
+        userID: process.env.ADMIN_USER_ID,
+        phone: process.env.ADMIN_PHONE,
+        password: process.env.ADMIN_PASSWORD,
+        source: "ADMIN_USER_ID environment configuration",
+    };
+    const hasPrimaryAdminConfig = primaryAdmin.userID || primaryAdmin.phone || primaryAdmin.password;
+    const adminAccounts = [
+        ...(hasPrimaryAdminConfig ? [primaryAdmin] : []),
+        ...parseAdditionalAdminAccounts().map((account, index) => ({
+            userID: account?.userID,
+            phone: account?.phone,
+            password: account?.password,
+            source: `ADMIN_ADDITIONAL_ACCOUNTS_JSON[${index}]`,
+        })),
+    ];
+
+    for (const { source, ...account } of adminAccounts) {
+        await ensureBootstrapAdmin(account, source);
+    }
 };
