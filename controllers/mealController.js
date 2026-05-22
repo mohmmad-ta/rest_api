@@ -9,6 +9,7 @@ const mongoose = require("mongoose");
 const multer = require("multer");
 const sharp = require("sharp");
 const qs = require("qs");
+const APIFeatures = require("../utils/apiFeatures");
 
 const MAX_IMAGE_SIZE_BYTES = 2 * 1024 * 1024;
 
@@ -117,7 +118,21 @@ exports.normalizeMealBody = (req, res, next) => {
 };
 
 
-exports.getAllRestaurant = factory.getAll(Restaurant);
+exports.getAllRestaurant = catchAsync(async (req, res) => {
+    const features = new APIFeatures(Restaurant.find().populate('category', 'name'), req.query)
+        .filter()
+        .sort()
+        .limitFields()
+        .paginate();
+
+    const data = await features.query;
+
+    res.status(200).json({
+        status: 'success',
+        results: data.length,
+        data
+    });
+});
 exports.getMeal = catchAsync(async (req, res, next) => {
     const data = await Meal.findById(req.params.id).populate({
         path: 'restaurantId',

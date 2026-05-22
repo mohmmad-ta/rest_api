@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
+const { DEFAULT_RESTAURANT_CATEGORY_ID } = require('../../utils/defaultRestaurantCategory');
 
 const restaurantSchema = new mongoose.Schema({
         name: {
@@ -37,6 +38,12 @@ const restaurantSchema = new mongoose.Schema({
         image: {
             type: String,
             default: 'https://rest.napoltech.com/public/images/users/user.png'
+        },
+        category: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'RestaurantCategory',
+            required: [true, 'يرجى اختيار تصنيف المطعم'],
+            default: () => DEFAULT_RESTAURANT_CATEGORY_ID
         },
         role: {
             type: String,

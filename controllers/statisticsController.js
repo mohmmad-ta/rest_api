@@ -714,7 +714,8 @@ exports.getAdminRestaurantsStatistics = catchAsync(async (req, res) => {
     const [restaurantDocs, ordersData] = await Promise.all([
         Restaurant.find()
             .setOptions({ includeInactive: true })
-            .select('name phone image active discount deliveryTime createdAt'),
+            .select('name phone image active category discount deliveryTime createdAt')
+            .populate('category', 'name'),
         Promise.resolve(restaurants[0] || { allTime: [], today: [], month: [] })
     ]);
 
@@ -734,6 +735,7 @@ exports.getAdminRestaurantsStatistics = catchAsync(async (req, res) => {
             phone: restaurant.phone,
             image: restaurant.image,
             active: restaurant.active,
+            category: restaurant.category,
             discount: restaurant.discount,
             deliveryTime: restaurant.deliveryTime,
             createdAt: restaurant.createdAt,

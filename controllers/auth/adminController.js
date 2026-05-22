@@ -60,6 +60,7 @@ exports.adminDeleteDelivery = factory.deleteOne(Delivery);
 exports.adminGetRestaurant = catchAsync(async (req, res, next) => {
     const user = await Restaurant.findById(req.params.id)
         .setOptions({ includeInactive: true })
+        .populate('category', 'name description')
         .populate('delivery')
         .populate('meal');
 
@@ -89,6 +90,8 @@ exports.adminUpdateRestaurant = catchAsync(async (req, res, next) => {
     if (!user) {
         return next(new AppError('No document found with that ID', 404));
     }
+
+    await user.populate('category', 'name description');
 
     res.status(200).json({
         status: 'success',

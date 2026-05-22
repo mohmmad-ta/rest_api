@@ -16,6 +16,7 @@ const mealsRouter = require('./routes/mealsRouter');
 const ordersRouter = require('./routes/ordersRouter');
 const reviewRoutes = require('./routes/reviewRoutes');
 const categoryRoutes = require('./routes/categoryRoutes');
+const restaurantCategoryRoutes = require('./routes/restaurantCategoryRoutes');
 const statisticsRoutes = require('./routes/statisticsRoutes');
 
 const app = express();
@@ -152,6 +153,7 @@ app.use(`${api}/meal`, mealsRouter);
 app.use(`${api}/order`, ordersRouter);
 app.use(`${api}/review`, reviewRoutes);
 app.use(`${api}/category`, categoryRoutes);
+app.use(`${api}/restaurant-category`, restaurantCategoryRoutes);
 app.use(`${api}/statistics`, statisticsRoutes);
 
 

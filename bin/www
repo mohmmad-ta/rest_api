@@ -10,6 +10,7 @@ const http = require('http');
 const mongoose = require("mongoose");
 const { initWebSocket } = require('../controllers/wsController');
 const ensureAdminAccount = require('../utils/ensureAdminAccount');
+const ensureRestaurantCategories = require('../utils/ensureRestaurantCategories');
 const { startOrderExpiryJob } = require('../utils/orderExpiry');
 /**
  * Get port from environment and store in Express.
@@ -40,6 +41,7 @@ const startServer = async () => {
     console.log('Connected to MongoDB database.');
 
     await ensureAdminAccount();
+    await ensureRestaurantCategories();
     startOrderExpiryJob();
 
     server.listen(port, () => {
