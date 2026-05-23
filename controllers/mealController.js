@@ -118,83 +118,56 @@ exports.normalizeMealBody = (req, res, next) => {
     next();
 };
 
-const buildRestaurantDistanceStages = (latitude, longitude, radiusKm) => [
-    {
-        $addFields: {
-            locationLatitudeNumber: {
-                $convert: {
-                    input: '$location.latitude',
-                    to: 'double',
-                    onError: null,
-                    onNull: null,
-                }
-            },
-            locationLongitudeNumber: {
-                $convert: {
-                    input: '$location.longitude',
-                    to: 'double',
-                    onError: null,
-                    onNull: null,
-                }
-            },
+const toRadians = (value) => value * (Math.PI / 180);
+
+const calculateDistanceKm = (from, to) => {
+    const fromLatitude = Number(from?.latitude);
+    const fromLongitude = Number(from?.longitude);
+    const toLatitude = Number(to?.latitude);
+    const toLongitude = Number(to?.longitude);
+
+    if (
+        !Number.isFinite(fromLatitude) ||
+        !Number.isFinite(fromLongitude) ||
+        !Number.isFinite(toLatitude) ||
+        !Number.isFinite(toLongitude)
+    ) {
+        return null;
+    }
+
+    const earthRadiusKm = 6371;
+    const dLat = toRadians(toLatitude - fromLatitude);
+    const dLng = toRadians(toLongitude - fromLongitude);
+    const lat1 = toRadians(fromLatitude);
+    const lat2 = toRadians(toLatitude);
+
+    const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1) * Math.cos(lat2) *
+        Math.sin(dLng / 2) * Math.sin(dLng / 2);
+
+    return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+const withRestaurantDistance = (restaurant, latitude, longitude) => {
+    const distanceKm = calculateDistanceKm(
+        { latitude, longitude },
+        {
+            latitude: restaurant?.location?.latitude,
+            longitude: restaurant?.location?.longitude,
         }
-    },
-    {
-        $match: {
-            locationLatitudeNumber: { $ne: null },
-            locationLongitudeNumber: { $ne: null },
-        }
-    },
-    {
-        $addFields: {
-            distanceKm: {
-                $let: {
-                    vars: {
-                        lat1: { $multiply: [latitude, Math.PI / 180] },
-                        lon1: { $multiply: [longitude, Math.PI / 180] },
-                        lat2: { $multiply: ['$locationLatitudeNumber', Math.PI / 180] },
-                        lon2: { $multiply: ['$locationLongitudeNumber', Math.PI / 180] },
-                    },
-                    in: {
-                        $multiply: [
-                            6371,
-                            {
-                                $acos: {
-                                    $min: [
-                                        1,
-                                        {
-                                            $max: [
-                                                -1,
-                                                {
-                                                    $add: [
-                                                        {
-                                                            $multiply: [
-                                                                { $sin: '$$lat1' },
-                                                                { $sin: '$$lat2' },
-                                                            ]
-                                                        },
-                                                        {
-                                                            $multiply: [
-                                                                { $cos: '$$lat1' },
-                                                                { $cos: '$$lat2' },
-                                                                { $cos: { $subtract: ['$$lon2', '$$lon1'] } },
-                                                            ]
-                                                        },
-                                                    ]
-                                                }
-                                            ]
-                                        }
-                                    ]
-                                }
-                            }
-                        ]
-                    }
-                }
-            }
-        }
-    },
-    { $match: { distanceKm: { $lte: radiusKm } } },
-];
+    );
+
+    if (distanceKm === null) {
+        return null;
+    }
+
+    return {
+        ...restaurant,
+        id: String(restaurant?._id || restaurant?.id),
+        distanceKm: Math.round(distanceKm * 100) / 100,
+    };
+};
 
 
 exports.getAllRestaurant = catchAsync(async (req, res) => {
@@ -207,52 +180,24 @@ exports.getAllRestaurant = catchAsync(async (req, res) => {
         const page = Math.max(Number(req.query.page) || 1, 1);
         const limit = Math.min(Math.max(Number(req.query.limit) || 30, 1), 100);
         const skip = (page - 1) * limit;
-        const category = mongoose.Types.ObjectId.isValid(req.query.category)
-            ? new mongoose.Types.ObjectId(req.query.category)
-            : null;
 
         const matchStage = {
             deleted: { $ne: true },
             active: { $ne: false },
-            ...(category ? { category } : {}),
+            ...(mongoose.Types.ObjectId.isValid(req.query.category) ? { category: req.query.category } : {}),
         };
 
-        const data = await Restaurant.aggregate([
-            { $match: matchStage },
-            ...buildRestaurantDistanceStages(latitude, longitude, radiusKm),
-            { $sort: { distanceKm: 1, createdAt: -1 } },
-            { $skip: skip },
-            { $limit: limit },
-            {
-                $lookup: {
-                    from: 'restaurantcategories',
-                    localField: 'category',
-                    foreignField: '_id',
-                    as: 'category'
-                }
-            },
-            { $unwind: { path: '$category', preserveNullAndEmptyArrays: true } },
-            {
-                $project: {
-                    id: { $toString: '$_id' },
-                    _id: 1,
-                    name: 1,
-                    phone: 1,
-                    discount: 1,
-                    ratingsAverage: 1,
-                    ratingsQuantity: 1,
-                    image: 1,
-                    role: 1,
-                    active: 1,
-                    deliveryTime: 1,
-                    workingHours: 1,
-                    category: 1,
-                    location: 1,
-                    distanceKm: { $round: ['$distanceKm', 2] },
-                    createdAt: 1,
-                }
-            }
-        ]);
+        const restaurants = await Restaurant.find(matchStage)
+            .select('name phone discount ratingsAverage ratingsQuantity image role active deliveryTime workingHours category location createdAt')
+            .populate('category', 'name')
+            .sort({ createdAt: -1 })
+            .lean();
+
+        const data = restaurants
+            .map((restaurant) => withRestaurantDistance(restaurant, latitude, longitude))
+            .filter((restaurant) => restaurant && restaurant.distanceKm <= radiusKm)
+            .sort((a, b) => a.distanceKm - b.distanceKm || new Date(b.createdAt) - new Date(a.createdAt))
+            .slice(skip, skip + limit);
 
         return res.status(200).json({
             status: 'success',
@@ -284,103 +229,56 @@ exports.getTopRestaurants = catchAsync(async (req, res) => {
     const radiusKm = Math.min(Math.max(Number(req.query.radiusKm) || DEFAULT_RESTAURANT_RADIUS_KM, 1), 100);
     const hasCoordinates = Number.isFinite(latitude) && Number.isFinite(longitude);
 
-    const [globalRatingStats] = await Restaurant.aggregate([
-        {
-            $match: {
-                deleted: { $ne: true },
-                active: { $ne: false },
-                discount: { $gt: 0 },
-                ratingsQuantity: { $gt: 0 },
-            }
-        },
-        {
-            $group: {
-                _id: null,
-                averageRating: { $avg: '$ratingsAverage' },
-            }
-        }
-    ]);
+    const ratedRestaurants = await Restaurant.find({
+        discount: { $gt: 0 },
+        ratingsQuantity: { $gt: 0 },
+    })
+        .select('ratingsAverage')
+        .lean();
 
-    const globalAverageRating = Number(globalRatingStats?.averageRating || 4);
+    const globalAverageRating = ratedRestaurants.length
+        ? ratedRestaurants.reduce((sum, restaurant) => sum + Number(restaurant.ratingsAverage || 0), 0) / ratedRestaurants.length
+        : 4;
 
-    const locationDistanceStages = hasCoordinates
-        ? buildRestaurantDistanceStages(latitude, longitude, radiusKm)
-        : [];
+    const restaurants = await Restaurant.find({ discount: { $gt: 0 } })
+        .select('name phone discount ratingsAverage ratingsQuantity image role active deliveryTime workingHours location createdAt')
+        .sort({ createdAt: -1 })
+        .lean();
 
-    const data = await Restaurant.aggregate([
-        {
-            $match: {
-                deleted: { $ne: true },
-                active: { $ne: false },
-                discount: { $gt: 0 },
+    const data = restaurants
+        .map((restaurant) => {
+            const restaurantWithDistance = hasCoordinates
+                ? withRestaurantDistance(restaurant, latitude, longitude)
+                : {
+                    ...restaurant,
+                    id: String(restaurant?._id || restaurant?.id),
+                };
+
+            if (!restaurantWithDistance || (hasCoordinates && restaurantWithDistance.distanceKm > radiusKm)) {
+                return null;
             }
-        },
-        ...locationDistanceStages,
-        {
-            $addFields: {
-                safeRatingAverage: { $ifNull: ['$ratingsAverage', 0] },
-                safeRatingsQuantity: { $ifNull: ['$ratingsQuantity', 0] },
-            }
-        },
-        {
-            $addFields: {
-                topScore: {
-                    $add: [
-                        {
-                            $multiply: [
-                                {
-                                    $divide: [
-                                        '$safeRatingsQuantity',
-                                        { $add: ['$safeRatingsQuantity', minimumTrustedRatings] }
-                                    ]
-                                },
-                                '$safeRatingAverage'
-                            ]
-                        },
-                        {
-                            $multiply: [
-                                {
-                                    $divide: [
-                                        minimumTrustedRatings,
-                                        { $add: ['$safeRatingsQuantity', minimumTrustedRatings] }
-                                    ]
-                                },
-                                globalAverageRating
-                            ]
-                        }
-                    ]
-                }
-            }
-        },
-        {
-            $sort: {
-                topScore: -1,
-                safeRatingsQuantity: -1,
-                safeRatingAverage: -1,
-                createdAt: -1,
-            }
-        },
-        { $limit: limit },
-        {
-            $project: {
-                id: { $toString: '$_id' },
-                _id: 1,
-                name: 1,
-                phone: 1,
-                discount: 1,
-                ratingsAverage: '$safeRatingAverage',
-                ratingsQuantity: '$safeRatingsQuantity',
-                topScore: { $round: ['$topScore', 2] },
-                image: 1,
-                role: 1,
-                active: 1,
-                deliveryTime: 1,
-                workingHours: 1,
-                distanceKm: { $round: ['$distanceKm', 2] },
-                createdAt: 1,
-            }
-        }
-    ]);
+
+            const safeRatingAverage = Number(restaurantWithDistance.ratingsAverage || 0);
+            const safeRatingsQuantity = Number(restaurantWithDistance.ratingsQuantity || 0);
+            const topScore =
+                (safeRatingsQuantity / (safeRatingsQuantity + minimumTrustedRatings)) * safeRatingAverage +
+                (minimumTrustedRatings / (safeRatingsQuantity + minimumTrustedRatings)) * globalAverageRating;
+
+            return {
+                ...restaurantWithDistance,
+                ratingsAverage: safeRatingAverage,
+                ratingsQuantity: safeRatingsQuantity,
+                topScore: Math.round(topScore * 100) / 100,
+            };
+        })
+        .filter(Boolean)
+        .sort((a, b) =>
+            b.topScore - a.topScore ||
+            b.ratingsQuantity - a.ratingsQuantity ||
+            b.ratingsAverage - a.ratingsAverage ||
+            new Date(b.createdAt) - new Date(a.createdAt)
+        )
+        .slice(0, limit);
 
     res.status(200).json({
         status: 'success',
