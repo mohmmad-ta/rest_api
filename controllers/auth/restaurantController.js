@@ -49,6 +49,7 @@ exports.getMeRestaurant = async (req, res, next) => {
     const user = await Restaurant.findById(req.params.id)
         .setOptions({ includeInactive: true })
         .select('+couponCode +couponPercentage +couponExpiresAt')
+        .populate('category', 'name description')
         .populate('delivery')
     res.status(200).json({
         status: 'success',
@@ -64,6 +65,7 @@ exports.updateMeRestaurant = catchAsync(async (req, res, next) => {
         'discount',
         'image',
         'deliveryTime',
+        'category',
         'location',
         'workingHours',
         'couponCode',
@@ -156,7 +158,8 @@ exports.updateMeRestaurant = catchAsync(async (req, res, next) => {
         }
     )
         .setOptions({ includeInactive: true })
-        .select('+couponCode +couponPercentage +couponExpiresAt');
+        .select('+couponCode +couponPercentage +couponExpiresAt')
+        .populate('category', 'name description');
 
     res.status(200).json({
         status: 'success',

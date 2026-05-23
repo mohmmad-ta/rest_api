@@ -1,7 +1,7 @@
 const {Router} = require('express');
 const { getMeDelivery, updateMeDelivery, deleteMeDelivery} = require('../controllers/auth/deliveryController');
 const { getMeRestaurant, deleteMeRestaurant, updateMeRestaurant} = require('../controllers/auth/restaurantController');
-const {createMeal, deleteMeal, getMeal, getRestaurantMeal, updateMeal, updateMealActive, getAllMyMeals, getRestaurantMeals, getAllRestaurant, resizeTourImages, uploadProductPhoto, getRestaurantSearch, getRandomRestaurants, normalizeMealBody} = require('../controllers/mealController');
+const {createMeal, deleteMeal, getMeal, getRestaurantMeal, updateMeal, updateMealActive, getAllMyMeals, getRestaurantMeals, getAllRestaurant, getTopRestaurants, resizeTourImages, uploadProductPhoto, getRestaurantSearch, getRandomRestaurants, normalizeMealBody} = require('../controllers/mealController');
 const {protect, restrictTo} = require('../controllers/auth/authController');
 const User = require('./../models/auth/userModel');
 const Delivery = require('./../models/auth/deliveryModel');
@@ -10,6 +10,7 @@ const Restaurant = require('./../models/auth/restaurantModel');
 const router = Router();
 
 router.get('/', getAllRestaurant);
+router.get('/top', getTopRestaurants);
 router.get('/search', getRestaurantSearch);
 router.get('/random', getRandomRestaurants);
 router.get('/:id', getRestaurantMeals);
