@@ -115,6 +115,7 @@ function sendNotificationToUser(userId, order, type, options = {}) {
         await sendPushToExternalUser(buildExternalId(normalizedUserId, options.role), {
           ...payload,
           data: notificationData,
+          sound: options.sound,
         });
       })
       .catch((error) => {

@@ -37,7 +37,8 @@ const restaurantSchema = new mongoose.Schema({
         },
         image: {
             type: String,
-            default: 'https://rest.napoltech.com/public/images/users/user.png'
+            default: () =>
+                `${process.env.BACKEND_PUBLIC_URL || "https://api.khaleeaapp.com"}/public/images/users/logo3.png`
         },
         category: {
             type: mongoose.Schema.Types.ObjectId,

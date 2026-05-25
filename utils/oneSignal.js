@@ -1,4 +1,6 @@
 const ONE_SIGNAL_API_URL = 'https://api.onesignal.com/notifications?c=push';
+const RESTAURANT_NEW_ORDER_SOUND = 'restaurant-new-order';
+const RESTAURANT_NEW_ORDER_ANDROID_CHANNEL_ID = 'restaurant-new-order-v1';
 const getOneSignalApiKey = () =>
     process.env.ONESIGNAL_APP_API_KEY || process.env.ONESIGNAL_REST_API_KEY;
 
@@ -6,6 +8,17 @@ const buildHeaders = () => ({
     Authorization: `Key ${getOneSignalApiKey()}`,
     'Content-Type': 'application/json',
 });
+
+const buildSoundOptions = (sound) => {
+    if (sound !== RESTAURANT_NEW_ORDER_SOUND) {
+        return {};
+    }
+
+    return {
+        ios_sound: 'noti.m4a',
+        existing_android_channel_id: RESTAURANT_NEW_ORDER_ANDROID_CHANNEL_ID,
+    };
+};
 
 const sendPushToExternalUser = async (externalId, payload) => {
     const apiKey = getOneSignalApiKey();
@@ -32,6 +45,7 @@ const sendPushToExternalUser = async (externalId, payload) => {
             ar: payload.bodyAr || payload.body || '',
         },
         data: payload.data || {},
+        ...buildSoundOptions(payload.sound),
     };
 
     try {

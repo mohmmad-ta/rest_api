@@ -398,11 +398,36 @@ exports.createMeal = factory.createOne(Meal);
 
 exports.getRandomRestaurants = catchAsync(async (req, res) => {
     const limit = Math.min(Math.max(Number(req.query.limit) || 30, 1), 50);
+    const latitude = Number(req.query.latitude);
+    const longitude = Number(req.query.longitude);
+    const radiusKm = Math.min(Math.max(Number(req.query.radiusKm) || DEFAULT_RESTAURANT_RADIUS_KM, 1), 100);
+    const hasCoordinates = Number.isFinite(latitude) && Number.isFinite(longitude);
     const exclude = String(req.query.exclude || "")
         .split(",")
         .map((item) => item.trim())
         .filter((item) => mongoose.Types.ObjectId.isValid(item))
         .map((item) => new mongoose.Types.ObjectId(item));
+
+    if (hasCoordinates) {
+        const restaurants = await Restaurant.find({
+            ...(exclude.length ? { _id: { $nin: exclude } } : {})
+        })
+            .select('name phone discount ratingsAverage ratingsQuantity image role active deliveryTime workingHours category location createdAt')
+            .populate('category', 'name')
+            .lean();
+
+        const data = restaurants
+            .map((restaurant) => withRestaurantDistance(restaurant, latitude, longitude))
+            .filter((restaurant) => restaurant && restaurant.distanceKm <= radiusKm)
+            .sort(() => Math.random() - 0.5)
+            .slice(0, limit);
+
+        return res.status(200).json({
+            status: 'success',
+            results: data.length,
+            data
+        });
+    }
 
     const data = await Restaurant.aggregate([
         {
@@ -469,6 +494,10 @@ exports.getRestaurantSearch = catchAsync(async (req, res, next) => {
     const page = Math.max(Number(req.query.page) || 1, 1);
     const limit = Math.min(Math.max(Number(req.query.limit) || 30, 1), 50);
     const skip = (page - 1) * limit;
+    const latitude = Number(req.query.latitude);
+    const longitude = Number(req.query.longitude);
+    const radiusKm = Math.min(Math.max(Number(req.query.radiusKm) || DEFAULT_RESTAURANT_RADIUS_KM, 1), 100);
+    const hasCoordinates = Number.isFinite(latitude) && Number.isFinite(longitude);
 
     if (!searchTerm) {
         return res.status(200).json({
@@ -492,7 +521,8 @@ exports.getRestaurantSearch = catchAsync(async (req, res, next) => {
             { phone: searchRegex }
         ]
     })
-        .select('name phone discount ratingsAverage image role active deliveryTime')
+        .select('name phone discount ratingsAverage ratingsQuantity image role active deliveryTime workingHours category location createdAt')
+        .populate('category', 'name')
         .lean();
 
     const matchedMealRestaurantIds = await Meal.find({
@@ -517,7 +547,8 @@ exports.getRestaurantSearch = catchAsync(async (req, res, next) => {
             const mealMatchedRestaurants = await Restaurant.find({
                 _id: { $in: missingRestaurantIds }
             })
-                .select('name phone discount ratingsAverage image role active deliveryTime')
+                .select('name phone discount ratingsAverage ratingsQuantity image role active deliveryTime workingHours category location createdAt')
+                .populate('category', 'name')
                 .lean();
 
             mealMatchedRestaurants.forEach((restaurant) => {
@@ -553,13 +584,23 @@ exports.getRestaurantSearch = catchAsync(async (req, res, next) => {
                 searchScore += 2;
             }
 
+            const restaurantWithDistance = hasCoordinates
+                ? withRestaurantDistance(restaurant, latitude, longitude)
+                : {
+                    ...restaurant,
+                    id: restaurantId,
+                };
+
+            if (!restaurantWithDistance || (hasCoordinates && restaurantWithDistance.distanceKm > radiusKm)) {
+                return null;
+            }
+
             return {
-                ...restaurant,
-                id: restaurantId,
+                ...restaurantWithDistance,
                 searchScore,
             };
         })
-        .filter((restaurant) => restaurant.searchScore > 0)
+        .filter((restaurant) => restaurant && restaurant.searchScore > 0)
         .sort((a, b) => {
             if (b.searchScore !== a.searchScore) {
                 return b.searchScore - a.searchScore;

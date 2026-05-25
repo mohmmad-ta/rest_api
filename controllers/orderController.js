@@ -275,6 +275,7 @@ exports.createOrder = catchAsync(async (req, res, next)=>{
     sendNotificationToUser(req.body.restaurantId, order, "create-order", {
         role: "restaurant",
         screen: "homeRest",
+        sound: "restaurant-new-order",
     });
 
     res.status(200).json({
