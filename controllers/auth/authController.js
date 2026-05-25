@@ -88,11 +88,15 @@ const sendLoginOtpWithOtpiq = async (phoneNumber, verificationCode) => {
     const whatsappPhoneId = process.env.OTPIQ_WHATSAPP_PHONE_ID;
 
     if (!apiKey) {
-        throw new AppError('OTPIQ API key is missing from the server configuration.', 500);
+        throw new AppError('تعذر إرسال رمز التحقق حالياً. يرجى المحاولة مرة أخرى لاحقاً.', 500, {
+            code: 'OTP_SERVICE_UNAVAILABLE',
+        });
     }
 
     if (!whatsappAccountId || !whatsappPhoneId) {
-        throw new AppError('OTPIQ WhatsApp account configuration is missing from the server environment.', 500);
+        throw new AppError('تعذر إرسال رمز التحقق حالياً. يرجى المحاولة مرة أخرى لاحقاً.', 500, {
+            code: 'OTP_SERVICE_UNAVAILABLE',
+        });
     }
 
     try {
@@ -120,13 +124,10 @@ const sendLoginOtpWithOtpiq = async (phoneNumber, verificationCode) => {
             }
         );
     } catch (error) {
-        const providerMessage =
-            error?.response?.data?.message ||
-            error?.response?.data?.error ||
-            error?.message;
         throw new AppError(
-            `فشل إرسال رمز التحقق عبر OTPIQ${providerMessage ? `: ${providerMessage}` : '.'}`,
-            502
+            'تعذر إرسال رمز التحقق إلى رقم الهاتف. يرجى التأكد من الرقم والمحاولة مرة أخرى.',
+            502,
+            { code: 'OTP_SEND_FAILED' }
         );
     }
 };
@@ -326,6 +327,37 @@ const setPasswordResetOtpForUser = async (user, { isResend = false } = {}) => {
 };
 
 const createPendingAccountAndSendOtp = async (Model, payload) => {
+    const existingAccount = await Model.findOne({ phone: payload.phone })
+        .setOptions({ includeInactive: true })
+        .select('+active +signupOtpCode +signupOtpExpires');
+
+    if (existingAccount) {
+        const isRestaurant = Model.modelName === 'Restaurant';
+        const isWaitingForOtp = Boolean(existingAccount.signupOtpCode || existingAccount.signupOtpExpires);
+
+        if (existingAccount.active === false && isWaitingForOtp) {
+            throw new AppError(
+                'يوجد حساب بهذا الرقم ولم يكتمل التحقق منه بعد. يرجى تسجيل الدخول لإرسال رمز جديد وإكمال التحقق.',
+                409,
+                { code: 'ACCOUNT_REQUIRES_VERIFICATION', action: 'login' }
+            );
+        }
+
+        if (isRestaurant && existingAccount.active === false) {
+            throw new AppError(
+                'حساب المطعم بهذا الرقم مسجل وتم التحقق منه، لكنه ينتظر موافقة الإدارة للتفعيل.',
+                409,
+                { code: 'RESTAURANT_PENDING_APPROVAL', action: 'login' }
+            );
+        }
+
+        throw new AppError(
+            'يوجد حساب مسجل مسبقاً بهذا الرقم. يرجى تسجيل الدخول أو استخدام استعادة كلمة المرور.',
+            409,
+            { code: 'ACCOUNT_ALREADY_EXISTS', action: 'login' }
+        );
+    }
+
     const account = await Model.create({
         ...payload,
         active: false,

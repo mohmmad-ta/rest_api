@@ -22,7 +22,9 @@ exports.deleteRestaurantCategory = catchAsync(async (req, res, next) => {
 
     const category = await RestaurantCategory.findByIdAndDelete(req.params.id);
     if (!category) {
-        return next(new AppError('No document found with that ID', 404));
+        return next(new AppError('تصنيف المطعم المطلوب غير موجود أو تم حذفه.', 404, {
+            code: 'RESTAURANT_CATEGORY_NOT_FOUND',
+        }));
     }
 
     res.status(204).json({

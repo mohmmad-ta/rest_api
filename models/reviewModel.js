@@ -20,17 +20,17 @@ const reviewSchema = new mongoose.Schema(
         restaurant: {
             type: mongoose.Schema.ObjectId,
             ref: 'Restaurant',
-            required: [true, 'Review must belong to a tour.']
+            required: [true, 'يرجى تحديد المطعم المراد تقييمه.']
         },
         order: {
             type: mongoose.Schema.ObjectId,
             ref: 'Order',
-            required: [true, 'Review must belong to an order.']
+            required: [true, 'يرجى تحديد الطلب المراد تقييمه.']
         },
         user: {
             type: mongoose.Schema.ObjectId,
             ref: 'User',
-            required: [true, 'Review must belong to a user']
+            required: [true, 'تعذر تحديد المستخدم الذي أرسل التقييم.']
         }
     },
     {

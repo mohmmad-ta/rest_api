@@ -330,7 +330,7 @@ exports.checkCouponCode = catchAsync(async (req, res, next) => {
     });
 });
 
-exports.getOrder = async (req, res, next) => {
+exports.getOrder = catchAsync(async (req, res, next) => {
     const query = Order.findById(req.params.id);
 
     if (req.query.includeDeleted === 'true') {
@@ -338,11 +338,18 @@ exports.getOrder = async (req, res, next) => {
     }
 
     const data = await query;
+
+    if (!data) {
+        return next(new AppError('الطلب المطلوب غير موجود أو لم يعد متاحاً.', 404, {
+            code: 'ORDER_NOT_FOUND',
+        }));
+    }
+
     res.status(200).json({
         status: 'success',
         data: req.user?.id ? await attachNeedsRatingToOrder(data, req.user.id) : data
     });
-};
+});
 exports.getAllMyOrder = (id) => catchAsync(async (req, res, next) => {
     const features = new APIFeatures(
         Order.find({
@@ -423,7 +430,7 @@ exports.getLastActiveUserOrder = catchAsync(async (req, res) => {
     });
 });
 
-exports.getOrderStatus = (id) => async (req, res, next) => {
+exports.getOrderStatus = (id) => catchAsync(async (req, res, next) => {
     let idParams = req.user.id;
     let access = id;
     if (access === "deliveryId" && req.params.id === "2") {
@@ -439,16 +446,18 @@ exports.getOrderStatus = (id) => async (req, res, next) => {
         status: 'success',
         data: data
     });
-};
+});
 
-exports.changStatus = (id) => async (req, res, next) => {
+exports.changStatus = (id) => catchAsync(async (req, res, next) => {
     let idParams = req.user.id;
     let access = id;
     if (id === "deliveryId" && req.body.lastState === "2") {
         access = 'restaurantId';
         idParams = req.user.restaurantId.toHexString();
     }else if (id === "restaurantId" && req.body.lastState === "2"){
-        return res.status(404).json({ status: 'fail', message: 'Order not found' });
+        return next(new AppError('لا يمكن للمطعم تغيير حالة هذا الطلب من مرحلته الحالية.', 400, {
+            code: 'INVALID_ORDER_STATUS_TRANSITION',
+        }));
     }
 
     const filter = { [access]: idParams, _id: req.body.id };
@@ -463,7 +472,9 @@ exports.changStatus = (id) => async (req, res, next) => {
     });
 
     if (!data) {
-        return res.status(404).json({ status: 'fail', message: 'Order not found' });
+        return next(new AppError('الطلب المطلوب غير موجود أو لا تملك صلاحية تعديله.', 404, {
+            code: 'ORDER_NOT_FOUND',
+        }));
     }
 
     const restaurantId = data.restaurantId.id;
@@ -518,4 +529,4 @@ exports.changStatus = (id) => async (req, res, next) => {
         status: 'success',
         data
     });
-};
+});

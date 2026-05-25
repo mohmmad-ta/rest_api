@@ -18,7 +18,9 @@ exports.deleteOne = Model =>
       }
 
     if (!doc) {
-      return next(new AppError('No document found with that ID', 404));
+      return next(new AppError('العنصر المطلوب غير موجود أو تم حذفه.', 404, {
+          code: 'RESOURCE_NOT_FOUND',
+      }));
     }
     res.status(204).json({status: 'success', data: null});
   });
@@ -48,7 +50,9 @@ exports.updateOne = Model =>
         });
 
         if (!doc) {
-            return next(new AppError('No document found with that ID', 404));
+            return next(new AppError('العنصر المطلوب غير موجود أو تم حذفه.', 404, {
+                code: 'RESOURCE_NOT_FOUND',
+            }));
         }
 
         res.status(200).json({
@@ -69,6 +73,13 @@ exports.createOne = Model =>
 exports.getOne = Model =>
   catchAsync(async (req, res, next) => {
     const query = await Model.findById(req.params.id)
+
+    if (!query) {
+      return next(new AppError('العنصر المطلوب غير موجود أو تم حذفه.', 404, {
+          code: 'RESOURCE_NOT_FOUND',
+      }));
+    }
+
     res.status(200).json({status: 'success', data: query});
   });
 

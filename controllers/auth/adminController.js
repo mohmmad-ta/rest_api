@@ -65,7 +65,9 @@ exports.adminGetRestaurant = catchAsync(async (req, res, next) => {
         .populate('meal');
 
     if (!user) {
-        return next(new AppError('No document found with that ID', 404));
+        return next(new AppError('المطعم المطلوب غير موجود أو تم حذفه.', 404, {
+            code: 'RESTAURANT_NOT_FOUND',
+        }));
     }
 
     res.status(200).json({
@@ -88,7 +90,9 @@ exports.adminUpdateRestaurant = catchAsync(async (req, res, next) => {
     );
 
     if (!user) {
-        return next(new AppError('No document found with that ID', 404));
+        return next(new AppError('المطعم المطلوب غير موجود أو تم حذفه.', 404, {
+            code: 'RESTAURANT_NOT_FOUND',
+        }));
     }
 
     await user.populate('category', 'name description');
@@ -106,7 +110,9 @@ exports.adminDeleteRestaurant = catchAsync(async (req, res, next) => {
     );
 
     if (!user) {
-        return next(new AppError('No document found with that ID', 404));
+        return next(new AppError('المطعم المطلوب غير موجود أو تم حذفه.', 404, {
+            code: 'RESTAURANT_NOT_FOUND',
+        }));
     }
 
     res.status(204).json({

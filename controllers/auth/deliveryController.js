@@ -30,7 +30,9 @@ exports.getAllMyDelivery = async (req, res, next) => {
 
 exports.updateMeDelivery = catchAsync(async (req, res, next) => {
     if (req.body.password || req.body.passwordConfirm) {
-        return next(new AppError('This route is not for password updates. Please use /updateMyPassword.', 400));
+        return next(new AppError('لا يمكن تغيير كلمة المرور من تعديل الملف الشخصي. يرجى استخدام خيار تغيير كلمة المرور.', 400, {
+            code: 'USE_PASSWORD_UPDATE',
+        }));
     }
     const filteredBody = filterObj(req.body, 'name', 'email');
     if (req.file) filteredBody.photo = req.file.filename;

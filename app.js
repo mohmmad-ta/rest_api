@@ -69,8 +69,12 @@ if (process.env.NODE_ENV === 'development') {
 
 const limiter = rateLimit({
     windowMs: 60 * 60 * 1000, // 1 hour
-    max: 400, // limit each IP to 300 requests per windowMs
-    message: 'Too many requests from this IP, please try again in an hour!',
+    max: 400,
+    message: {
+        status: 'fail',
+        code: 'RATE_LIMIT_EXCEEDED',
+        message: 'تم إرسال عدد كبير من الطلبات. يرجى المحاولة مرة أخرى بعد ساعة.',
+    },
     standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
     legacyHeaders: false, // Disable the `X-RateLimit-*` headers
     keyGenerator: getRateLimitKey,
@@ -124,7 +128,9 @@ const corsOptions = {
             return callback(null, true);
         }
 
-        return callback(new AppError('CORS origin is not allowed.', 403));
+        return callback(new AppError('تعذر تنفيذ الطلب من هذا المصدر.', 403, {
+            code: 'ORIGIN_NOT_ALLOWED',
+        }));
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization', 'x-app-client-key', 'x-auth-mode'],
@@ -156,7 +162,11 @@ app.use(`${api}/category`, categoryRoutes);
 app.use(`${api}/restaurant-category`, restaurantCategoryRoutes);
 app.use(`${api}/statistics`, statisticsRoutes);
 
-
+app.use(`${api}`, (req, res, next) => {
+    next(new AppError('الخدمة المطلوبة غير موجودة. يرجى تحديث التطبيق أو المحاولة مرة أخرى لاحقاً.', 404, {
+        code: 'ENDPOINT_NOT_FOUND',
+    }));
+});
 
 app.use(globalErrorHandler);
 module.exports = app;

@@ -556,7 +556,9 @@ exports.getAdminServiceFeeCollections = catchAsync(async (req, res, next) => {
     const monthRange = getCollectionMonthRange(req.query.month);
 
     if (!monthRange) {
-        return next(new AppError('Collection month must use YYYY-MM format.', 400));
+        return next(new AppError('صيغة الشهر غير صحيحة. يرجى اختيار شهر صالح.', 400, {
+            code: 'INVALID_COLLECTION_MONTH',
+        }));
     }
 
     const currentMonthStart = startOfMonth();
@@ -585,15 +587,21 @@ exports.updateAdminServiceFeeCollection = catchAsync(async (req, res, next) => {
     const status = String(req.body.status || '').trim();
 
     if (!monthRange) {
-        return next(new AppError('Collection month must use YYYY-MM format.', 400));
+        return next(new AppError('صيغة الشهر غير صحيحة. يرجى اختيار شهر صالح.', 400, {
+            code: 'INVALID_COLLECTION_MONTH',
+        }));
     }
 
     if (!['pending', 'collected'].includes(status)) {
-        return next(new AppError('Collection status must be pending or collected.', 400));
+        return next(new AppError('حالة التحصيل غير صحيحة. يرجى اختيار حالة صحيحة.', 400, {
+            code: 'INVALID_COLLECTION_STATUS',
+        }));
     }
 
     if (status === 'collected' && !isCollectionMonthClosed(monthRange)) {
-        return next(new AppError('Service fees can be collected after the month ends.', 400));
+        return next(new AppError('يمكن تأكيد تحصيل رسوم الخدمة بعد انتهاء الشهر فقط.', 400, {
+            code: 'COLLECTION_MONTH_NOT_CLOSED',
+        }));
     }
 
     const restaurant = await Restaurant.findById(req.params.restaurantId)
@@ -601,7 +609,9 @@ exports.updateAdminServiceFeeCollection = catchAsync(async (req, res, next) => {
         .select('_id');
 
     if (!restaurant) {
-        return next(new AppError('Restaurant was not found.', 404));
+        return next(new AppError('المطعم المطلوب غير موجود أو تم حذفه.', 404, {
+            code: 'RESTAURANT_NOT_FOUND',
+        }));
     }
 
     const collectionUpdate = status === 'collected'

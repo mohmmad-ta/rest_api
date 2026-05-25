@@ -10,7 +10,7 @@ const serviceFeeCollectionSchema = new mongoose.Schema(
         month: {
             type: String,
             required: [true, 'Collection month is required.'],
-            match: [/^\d{4}-(0[1-9]|1[0-2])$/, 'Collection month must use YYYY-MM format.']
+            match: [/^\d{4}-(0[1-9]|1[0-2])$/, 'صيغة الشهر غير صحيحة. يرجى اختيار شهر صالح.']
         },
         status: {
             type: String,

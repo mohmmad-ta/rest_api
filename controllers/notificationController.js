@@ -89,7 +89,9 @@ exports.markNotificationAsRead = (role) =>
         );
 
         if (!notification) {
-            return next(new AppError('Notification not found', 404));
+            return next(new AppError('الإشعار المطلوب غير موجود أو تم حذفه.', 404, {
+                code: 'NOTIFICATION_NOT_FOUND',
+            }));
         }
 
         res.status(200).json({

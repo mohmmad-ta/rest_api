@@ -19,7 +19,9 @@ const multerFilter = (req, file, cb) => {
     if (file.mimetype.startsWith('image')) {
         cb(null, true);
     } else {
-        cb(new AppError('Not an image! Please upload only images.', 400), false);
+        cb(new AppError('الملف المختار ليس صورة. يرجى رفع صورة فقط.', 400, {
+            code: 'INVALID_IMAGE_FILE',
+        }), false);
     }
 };
 const upload = multer({
@@ -34,7 +36,9 @@ exports.uploadProductPhoto = (req, res, next) => {
         {name: 'image', maxCount: 1},
     ])(req, res, (err) => {
         if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
-            return next(new AppError('Image size must be 2MB or smaller.', 400));
+            return next(new AppError('حجم الصورة يجب ألا يتجاوز 2 ميغابايت.', 400, {
+                code: 'IMAGE_TOO_LARGE',
+            }));
         }
 
         if (err) {
@@ -293,7 +297,9 @@ exports.getMeal = catchAsync(async (req, res, next) => {
     });
 
     if (!data) {
-        return next(new AppError('No document found with that ID', 404));
+        return next(new AppError('الوجبة المطلوبة غير موجودة أو تم حذفها.', 404, {
+            code: 'MEAL_NOT_FOUND',
+        }));
     }
 
     if (!data.restaurantId || data.restaurantId.active === false) {
@@ -318,7 +324,9 @@ exports.getRestaurantMeal = catchAsync(async (req, res, next) => {
         });
 
     if (!data) {
-        return next(new AppError('No document found with that ID', 404));
+        return next(new AppError('الوجبة المطلوبة غير موجودة أو لا تخص هذا المطعم.', 404, {
+            code: 'MEAL_NOT_FOUND',
+        }));
     }
 
     res.status(200).json({
@@ -343,7 +351,9 @@ exports.updateMealActive = catchAsync(async (req, res, next) => {
     ).setOptions({ includeInactive: true });
 
     if (!data) {
-        return next(new AppError('No document found with that ID', 404));
+        return next(new AppError('الوجبة المطلوبة غير موجودة أو لا تخص هذا المطعم.', 404, {
+            code: 'MEAL_NOT_FOUND',
+        }));
     }
 
     res.status(200).json({
@@ -365,7 +375,9 @@ exports.updateMeal = catchAsync(async (req, res, next) => {
     ).setOptions({ includeInactive: true });
 
     if (!data) {
-        return next(new AppError('No document found with that ID', 404));
+        return next(new AppError('الوجبة المطلوبة غير موجودة أو لا تخص هذا المطعم.', 404, {
+            code: 'MEAL_NOT_FOUND',
+        }));
     }
 
     res.status(200).json({
@@ -380,7 +392,9 @@ exports.deleteMeal = catchAsync(async (req, res, next) => {
     }).setOptions({ includeInactive: true });
 
     if (!data) {
-        return next(new AppError('No document found with that ID', 404));
+        return next(new AppError('الوجبة المطلوبة غير موجودة أو لا تخص هذا المطعم.', 404, {
+            code: 'MEAL_NOT_FOUND',
+        }));
     }
 
     if (data?.image && data.image.includes('/public/')) {
@@ -476,7 +490,9 @@ exports.getRestaurantMeals = async (req, res, next) => {
     const data = await Restaurant.findById(req.params.id).lean();
 
     if (!data) {
-        return next(new AppError('No document found with that ID', 404));
+        return next(new AppError('المطعم المطلوب غير موجود أو غير متاح حالياً.', 404, {
+            code: 'RESTAURANT_NOT_FOUND',
+        }));
     }
 
     const meal = await Meal.find({ restaurantId: req.params.id }).sort({ createdAt: -1 });
