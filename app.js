@@ -9,6 +9,7 @@ const hpp = require('hpp');
 const qs = require('qs');
 const AppError = require('./utils/appError');
 const globalErrorHandler = require('./controllers/errorController');
+const sanitizeRequest = require('./utils/sanitizeRequest');
 require('dotenv').config();
 
 const usersRouter = require('./routes/usersRouter');
@@ -83,8 +84,18 @@ app.use('/api', limiter);
 
 // Body parser, reading data from body into req.body
 app.use(express.json({ limit: '15kb' }));
+app.use(express.urlencoded({ extended: false, limit: '15kb' }));
 
-app.set('query parser', str => qs.parse(str));
+app.set('query parser', str => qs.parse(str, {
+    allowDots: false,
+    allowPrototypes: false,
+    arrayLimit: 50,
+    depth: 8,
+    parameterLimit: 100,
+    plainObjects: true,
+}));
+
+app.use(sanitizeRequest);
 
 // Prevent parameter pollution
 app.use(
@@ -139,7 +150,6 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
-app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 
 const allowPublicAssetEmbedding = (req, res, next) => {

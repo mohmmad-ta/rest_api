@@ -17,9 +17,11 @@ class APIFeatures {
         const excludedFields = ['name', 'fields', 'page', 'limit', 'sort'];
         excludedFields.forEach(el => delete queryObj[el]);
 
-        // Convert operators to MongoDB syntax
+        // Convert only safe comparison operators to MongoDB syntax.
+        // Do not expose `$ne` from user input because it is commonly abused
+        // for NoSQL injection/enumeration attacks.
         let queryStr = JSON.stringify(queryObj);
-        queryStr = queryStr.replace(/\b(gte|gt|lte|lt|ne)\b/g, match => `$${match}`);
+        queryStr = queryStr.replace(/\b(gte|gt|lte|lt)\b/g, match => `$${match}`);
 
         // Convert number-like strings to numbers
         const parsedQuery = JSON.parse(queryStr, (key, value) => {
@@ -35,7 +37,10 @@ class APIFeatures {
 
     sort() {
         if (this.queryString.sort) {
-            const sortBy = this.queryString.sort.split(',').join(' ');
+            const sortBy = this.queryString.sort
+                .split(',')
+                .filter(field => !field.includes('.') && !field.includes('$'))
+                .join(' ');
             this.query = this.query.sort(sortBy);
         } else {
             this.query = this.query.sort('-createdAt');
@@ -45,7 +50,10 @@ class APIFeatures {
 
     limitFields() {
         if (this.queryString.fields) {
-            const fields = this.queryString.fields.split(',').join(' ');
+            const fields = this.queryString.fields
+                .split(',')
+                .filter(field => !field.startsWith('+') && !field.includes('.') && !field.includes('$'))
+                .join(' ');
             this.query = this.query.select(fields);
         } else {
             this.query = this.query.select('-__v');

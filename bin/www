@@ -20,6 +20,9 @@ const port = normalizePort(process.env.PORT || '3000');
 const DB = process.env.MONGOOSE_URL;
 app.set('port', port);
 
+mongoose.set('sanitizeFilter', true);
+mongoose.set('strictQuery', true);
+
 /**
  * Create HTTP server.
  */

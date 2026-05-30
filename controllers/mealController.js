@@ -10,6 +10,7 @@ const multer = require("multer");
 const sharp = require("sharp");
 const qs = require("qs");
 const APIFeatures = require("../utils/apiFeatures");
+const { assertSafeObject } = require("../utils/sanitizeRequest");
 
 const MAX_IMAGE_SIZE_BYTES = 2 * 1024 * 1024;
 const DEFAULT_RESTAURANT_RADIUS_KM = 10;
@@ -110,7 +111,15 @@ const normalizeNotesList = (value) =>
         .filter((item) => item.title);
 
 exports.normalizeMealBody = (req, res, next) => {
-    const parsedBody = qs.parse(req.body || {});
+    const parsedBody = qs.parse(req.body || {}, {
+        allowDots: false,
+        allowPrototypes: false,
+        arrayLimit: 50,
+        depth: 8,
+        parameterLimit: 100,
+        plainObjects: true,
+    });
+    assertSafeObject(parsedBody, 'body');
 
     req.body = {
         ...parsedBody,
@@ -234,7 +243,6 @@ exports.getTopRestaurants = catchAsync(async (req, res) => {
     const hasCoordinates = Number.isFinite(latitude) && Number.isFinite(longitude);
 
     const ratedRestaurants = await Restaurant.find({
-        discount: { $gt: 0 },
         ratingsQuantity: { $gt: 0 },
     })
         .select('ratingsAverage')
@@ -244,7 +252,7 @@ exports.getTopRestaurants = catchAsync(async (req, res) => {
         ? ratedRestaurants.reduce((sum, restaurant) => sum + Number(restaurant.ratingsAverage || 0), 0) / ratedRestaurants.length
         : 4;
 
-    const restaurants = await Restaurant.find({ discount: { $gt: 0 } })
+    const restaurants = await Restaurant.find()
         .select('name phone discount ratingsAverage ratingsQuantity image role active deliveryTime workingHours location createdAt')
         .sort({ createdAt: -1 })
         .lean();

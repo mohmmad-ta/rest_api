@@ -4,6 +4,7 @@ const catchAsync = require('../../utils/catchAsync');
 const AppError = require('../../utils/appError');
 const multer = require("multer");
 const sharp = require("sharp");
+const { assertSafeObject } = require('../../utils/sanitizeRequest');
 
 const multerStorage = multer.memoryStorage();
 const multerFilter = (req, file, cb) => {
@@ -61,6 +62,8 @@ exports.getMeRestaurant = async (req, res, next) => {
 
 
 exports.updateMeRestaurant = catchAsync(async (req, res, next) => {
+    assertSafeObject(req.body, 'body');
+
     const filteredBody = filterObj(
         req.body,
         'name',
@@ -90,6 +93,8 @@ exports.updateMeRestaurant = catchAsync(async (req, res, next) => {
             return next(new AppError('صيغة وقت عمل المطعم غير صحيحة.', 400));
         }
     }
+
+    assertSafeObject(filteredBody, 'body');
 
     if (typeof filteredBody.couponCode === 'string') {
         const normalizedCouponCode = filteredBody.couponCode.trim().toUpperCase();

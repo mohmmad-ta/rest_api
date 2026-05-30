@@ -1,6 +1,7 @@
 const catchAsync = require('./../utils/catchAsync');
 const AppError = require('./../utils/appError');
 const APIFeatures = require('./../utils/apiFeatures');
+const { assertSafeObject } = require('./../utils/sanitizeRequest');
 const fs = require("fs");
 const path = require("path");
 
@@ -27,6 +28,7 @@ exports.deleteOne = Model =>
 
 exports.updateOne = Model =>
     catchAsync(async (req, res, next) => {
+        assertSafeObject(req.body, 'body');
         let updateData = { ...req.body };
 
         // If a single file was uploaded
@@ -63,6 +65,7 @@ exports.updateOne = Model =>
 
 exports.createOne = Model =>
   catchAsync(async (req, res, next) => {
+    assertSafeObject(req.body, 'body');
     req.body.user = req.user.id;
     if (!req.body.restaurantId){req.body.restaurantId = req.user.id}
     const doc = await Model.create(req.body);

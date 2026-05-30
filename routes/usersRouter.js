@@ -30,10 +30,10 @@ router.post('/user/resendPasswordResetOtp', requireAppClient, otpResendLimiter, 
 router.post('/restaurant/resendPasswordResetOtp', requireAppClient, otpResendLimiter, resendRestaurantPasswordResetOtp);
 router.patch('/user/resetPasswordWithOtp', requireAppClient, authLoginLimiter, resetUserPasswordWithOtp);
 router.patch('/restaurant/resetPasswordWithOtp', requireAppClient, authLoginLimiter, resetRestaurantPasswordWithOtp);
-router.post('/admin/login', requireAppClient, authLoginLimiter, loginAdmin);
-router.post('/admin/verifyLoginOtp', requireAppClient, otpVerifyLimiter, verifyAdminLoginOtp);
-router.post('/admin/resendLoginOtp', requireAppClient, otpResendLimiter, resendAdminLoginOtp);
-router.get('/logout', requireAppClient, logout);
+router.post('/admin/login', authLoginLimiter, loginAdmin);
+router.post('/admin/verifyLoginOtp', otpVerifyLimiter, verifyAdminLoginOtp);
+router.post('/admin/resendLoginOtp', otpResendLimiter, resendAdminLoginOtp);
+router.get('/logout', logout);
 router.get('/checkToken', requireAppClient, checkToken);
 
 

@@ -23,6 +23,24 @@ const ADMIN_LOGIN_OTP_MAX_VERIFY_ATTEMPTS = parseInt(process.env.ADMIN_LOGIN_OTP
 const ADMIN_LOGIN_OTP_MAX_RESENDS = parseInt(process.env.ADMIN_LOGIN_OTP_MAX_RESENDS || "3", 10);
 const ADMIN_LOGIN_OTP_BLOCK_MINUTES = parseInt(process.env.ADMIN_LOGIN_OTP_BLOCK_MINUTES || "30", 10);
 
+const parsePositiveIntegerEnv = (value, fallback) => {
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const DEFAULT_JWT_EXPIRES_IN_DAYS = parsePositiveIntegerEnv(process.env.JWT_EXPIRES_IN_DAYS, 60);
+const DEFAULT_JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || `${DEFAULT_JWT_EXPIRES_IN_DAYS}d`;
+const DEFAULT_JWT_COOKIE_EXPIRES_IN_DAYS = parsePositiveIntegerEnv(
+    process.env.JWT_COOKIE_EXPIRES_IN,
+    DEFAULT_JWT_EXPIRES_IN_DAYS
+);
+const ADMIN_JWT_EXPIRES_IN_DAYS = parsePositiveIntegerEnv(process.env.ADMIN_JWT_EXPIRES_IN_DAYS, 1);
+const ADMIN_JWT_EXPIRES_IN = `${ADMIN_JWT_EXPIRES_IN_DAYS}d`;
+const ADMIN_JWT_COOKIE_EXPIRES_IN_DAYS = parsePositiveIntegerEnv(
+    process.env.ADMIN_JWT_COOKIE_EXPIRES_IN,
+    ADMIN_JWT_EXPIRES_IN_DAYS
+);
+
 const parseBooleanEnv = (value, fallback = false) => {
     if (typeof value !== 'string') {
         return fallback;
@@ -625,7 +643,7 @@ const verifyAdminLoginOtpHandler = catchAsync(async (req, res, next) => {
     resetAdminLoginOtpSecurityState(user);
     await user.save({ validateBeforeSave: false });
 
-    createSendToken(user, 200, res);
+    createSendCookieSession(user, 200, res);
 });
 
 const resendAdminLoginOtpHandler = catchAsync(async (req, res, next) => {
@@ -648,13 +666,13 @@ const resendAdminLoginOtpHandler = catchAsync(async (req, res, next) => {
 });
 
 // *** jwt token ***
-const signToken = (id)=>{
+const signToken = (id, expiresIn = process.env.JWT_EXPIRES_IN || DEFAULT_JWT_EXPIRES_IN)=>{
     return jwt.sign({id}, process.env.JWT_SECRET, {
-        expiresIn: process.env.JWT_EXPIRES_IN
+        expiresIn
     })
 }
 
-const buildJwtCookieOptions = () => {
+const buildJwtCookieOptions = (expiresInDays = process.env.JWT_COOKIE_EXPIRES_IN || DEFAULT_JWT_COOKIE_EXPIRES_IN_DAYS) => {
     const secureCookies = parseBooleanEnv(
         process.env.JWT_COOKIE_SECURE,
         process.env.NODE_ENV === 'production'
@@ -663,7 +681,7 @@ const buildJwtCookieOptions = () => {
         (secureCookies ? 'none' : 'lax');
     const cookieOptions = {
         expires: new Date(
-            Date.now() + process.env.JWT_COOKIE_EXPIRES_IN * 24 * 60 * 60 * 1000
+            Date.now() + Number(expiresInDays) * 24 * 60 * 60 * 1000
         ),
         httpOnly: true,
         sameSite,
@@ -688,6 +706,20 @@ const createSendToken = (user, statusCode, res) => {
     res.status(statusCode).json({
         status: 'success',
         token: token,
+        data: {
+            user
+        }
+    });
+};
+
+const createSendCookieSession = (user, statusCode, res) => {
+    const token = signToken(user._id, ADMIN_JWT_EXPIRES_IN);
+    const cookieOptions = buildJwtCookieOptions(ADMIN_JWT_COOKIE_EXPIRES_IN_DAYS);
+    res.cookie('jwt', token, cookieOptions);
+    user.password = undefined;
+
+    res.status(statusCode).json({
+        status: 'success',
         data: {
             user
         }
