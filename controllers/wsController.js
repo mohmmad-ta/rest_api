@@ -8,6 +8,7 @@ const { createInAppNotification } = require('./notificationController');
 
 let wss = null;
 const userSockets = new Map();
+let heartbeatInterval = null;
 
 function buildExternalId(userId, role) {
   const normalizedUserId = userId?.toString?.() || `${userId || ''}`.trim();
@@ -22,7 +23,33 @@ function buildExternalId(userId, role) {
 function initWebSocket(server) {
   wss = new WebSocket.Server({ server });
 
+  heartbeatInterval = setInterval(() => {
+    if (!wss) return;
+
+    wss.clients.forEach((ws) => {
+      if (ws.isAlive === false) {
+        ws.terminate();
+        return;
+      }
+
+      ws.isAlive = false;
+      ws.ping();
+    });
+  }, 15000);
+
+  wss.on('close', () => {
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+      heartbeatInterval = null;
+    }
+  });
+
   wss.on('connection', (ws, req) => {
+    ws.isAlive = true;
+    ws.on('pong', () => {
+      ws.isAlive = true;
+    });
+
     // Parse user ID from query param or JWT token
     const url = new URL(req.url, `http://${req.headers.host}`);
     console.log(url);
@@ -41,11 +68,18 @@ function initWebSocket(server) {
     }
 
     // Save the socket by user ID
+    const existingSocket = userSockets.get(userId);
+    if (existingSocket && existingSocket !== ws && existingSocket.readyState === WebSocket.OPEN) {
+      existingSocket.close();
+    }
+
     userSockets.set(userId, ws);
     console.log(`User ${userId} connected`);
 
     ws.on('close', () => {
-      userSockets.delete(userId);
+      if (userSockets.get(userId) === ws) {
+        userSockets.delete(userId);
+      }
       console.log(`User ${userId} disconnected`);
     });
   });

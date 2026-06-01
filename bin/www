@@ -10,6 +10,7 @@ const http = require('http');
 const mongoose = require("mongoose");
 const { initWebSocket } = require('../controllers/wsController');
 const ensureAdminAccount = require('../utils/ensureAdminAccount');
+const ensureAccountTimestamps = require('../utils/ensureAccountTimestamps');
 const ensureRestaurantCategories = require('../utils/ensureRestaurantCategories');
 const { startOrderExpiryJob } = require('../utils/orderExpiry');
 /**
@@ -44,6 +45,7 @@ const startServer = async () => {
 
     await ensureAdminAccount();
     await ensureRestaurantCategories();
+    await ensureAccountTimestamps();
     startOrderExpiryJob();
 
     server.listen(port, () => {

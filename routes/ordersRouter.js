@@ -1,5 +1,5 @@
 const {Router} = require('express');
-const {createOrder, checkCouponCode, getAllMyOrder, getUserOrderHistory, getLastActiveUserOrder, getOrderStatus, changStatus, getOrder} = require('../controllers/orderController');
+const {createOrder, checkCouponCode, getAllMyOrder, getUserOrderHistory, getLastActiveUserOrder, getActiveUserOrders, getOrderStatus, changStatus, getOrder} = require('../controllers/orderController');
 const {protect, protectAnyRole, restrictTo} = require('../controllers/auth/authController');
 const { getMyNotifications, markNotificationAsRead } = require('../controllers/notificationController');
 const Order = require('./../models/orderModel');
@@ -24,6 +24,7 @@ router.get('/getOneOrder/:id', protectAnyRole, getOrder);
 router.get('/user/myAllOrders', protect(User), restrictTo('user'), getAllMyOrder('userId'));
 router.get('/user/orderHistory', protect(User), restrictTo('user'), getUserOrderHistory);
 router.get('/user/lastActiveOrder', protect(User), restrictTo('user'), getLastActiveUserOrder);
+router.get('/user/activeOrders', protect(User), restrictTo('user'), getActiveUserOrders);
 router.get('/user/myNotifications', protect(User), restrictTo('user'), getMyNotifications('user'));
 router.patch('/user/myNotifications/:id/read', protect(User), restrictTo('user'), markNotificationAsRead('user'));
 router.post('/user/checkCouponCode', protect(User), restrictTo('user'), checkCouponCode);

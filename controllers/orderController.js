@@ -382,6 +382,7 @@ exports.getUserOrderHistory = catchAsync(async (req, res) => {
 
     const filters = {
         userId: req.user.id,
+        status: '4',
     };
 
     const [orders, total] = await Promise.all([
@@ -426,6 +427,26 @@ exports.getLastActiveUserOrder = catchAsync(async (req, res) => {
 
     res.status(200).json({
         status: 'success',
+        data,
+    });
+});
+
+exports.getActiveUserOrders = catchAsync(async (req, res) => {
+    const orders = await Order.find({
+        userId: req.user.id,
+        status: { $ne: '0' },
+    })
+        .sort('createdAt')
+        .limit(50);
+
+    const enrichedOrders = await attachNeedsRatingToOrders(orders, req.user.id);
+    const data = enrichedOrders.filter(
+        (order) => String(order?.status || '') !== '4' || Boolean(order?.needsRating)
+    );
+
+    res.status(200).json({
+        status: 'success',
+        results: data.length,
         data,
     });
 });

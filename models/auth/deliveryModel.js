@@ -55,7 +55,8 @@ const deliverySchema = new mongoose.Schema({
     },
     {
         toJSON: { virtuals: true },
-        toObject: { virtuals: true }
+        toObject: { virtuals: true },
+        timestamps: true
     });
 
 deliverySchema.pre('save',  async function (next) {
