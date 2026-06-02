@@ -144,7 +144,7 @@ const corsOptions = {
         }));
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-app-client-key', 'x-auth-mode'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-mode'],
     credentials: true,
     optionsSuccessStatus: 200
 };

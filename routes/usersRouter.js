@@ -4,7 +4,6 @@ const { getMeDelivery, updateMeDelivery, deleteMeDelivery, getAllMyDelivery} = r
 const { getMeRestaurant, deleteMeRestaurant, updateMeRestaurant, resizeTourImages, uploadProductPhoto} = require('../controllers/auth/restaurantController');
 const { getMeAdmin, adminDeleteDelivery, adminDeleteRestaurant, adminDeleteUser, adminGetAllDelivery, adminGetAllRestaurant, adminUpdateRestaurant, adminGetAllUsers, adminGetDelivery, adminGetRestaurant, adminUpdateUser, adminUpdateDelivery, adminGetUser, adminDashboardSummary, adminGetAllOrders, adminGetOrder, adminUpdateOrder, adminDeleteOrder, adminGetAllMeals, adminGetMeal, adminCreateMeal, adminUpdateMeal, adminDeleteMeal } = require('../controllers/auth/adminController');
 const {signupUser, loginAdmin, loginDelivery, loginRestaurant, loginUser, signupDelivery, signupRestaurant, logout, forgotPassword, resetPassword, updatePassword, protect, restrictTo, checkToken, verifyUserSignupOtp, verifyRestaurantSignupOtp, resendUserSignupOtp, resendRestaurantSignupOtp, verifyAdminLoginOtp, resendAdminLoginOtp, requestUserPasswordResetOtp, requestRestaurantPasswordResetOtp, resendUserPasswordResetOtp, resendRestaurantPasswordResetOtp, verifyUserPasswordResetOtp, verifyRestaurantPasswordResetOtp, resetUserPasswordWithOtp, resetRestaurantPasswordWithOtp} = require('../controllers/auth/authController');
-const requireAppClient = require('../utils/requireAppClient');
 const { authLoginLimiter, authSignupLimiter, otpVerifyLimiter, otpResendLimiter } = require('../utils/securityRateLimiters');
 const Admin = require('./../models/auth/adminModel');
 const User = require('./../models/auth/userModel');
@@ -13,28 +12,28 @@ const Restaurant = require('./../models/auth/restaurantModel');
 
 const router = Router();
 //  Authentication Controller
-router.post('/user/signup', requireAppClient, authSignupLimiter, signupUser);
-router.post('/restaurant/signup', requireAppClient, authSignupLimiter, signupRestaurant);
-router.post('/delivery/login', requireAppClient, authLoginLimiter, loginDelivery);
-router.post('/restaurant/login', requireAppClient, authLoginLimiter, loginRestaurant);
-router.post('/user/login', requireAppClient, authLoginLimiter, loginUser);
-router.post('/restaurant/verifySignupOtp', requireAppClient, otpVerifyLimiter, verifyRestaurantSignupOtp);
-router.post('/user/verifySignupOtp', requireAppClient, otpVerifyLimiter, verifyUserSignupOtp);
-router.post('/restaurant/resendSignupOtp', requireAppClient, otpResendLimiter, resendRestaurantSignupOtp);
-router.post('/user/resendSignupOtp', requireAppClient, otpResendLimiter, resendUserSignupOtp);
-router.post('/user/requestPasswordResetOtp', requireAppClient, authLoginLimiter, requestUserPasswordResetOtp);
-router.post('/restaurant/requestPasswordResetOtp', requireAppClient, authLoginLimiter, requestRestaurantPasswordResetOtp);
-router.post('/user/verifyPasswordResetOtp', requireAppClient, otpVerifyLimiter, verifyUserPasswordResetOtp);
-router.post('/restaurant/verifyPasswordResetOtp', requireAppClient, otpVerifyLimiter, verifyRestaurantPasswordResetOtp);
-router.post('/user/resendPasswordResetOtp', requireAppClient, otpResendLimiter, resendUserPasswordResetOtp);
-router.post('/restaurant/resendPasswordResetOtp', requireAppClient, otpResendLimiter, resendRestaurantPasswordResetOtp);
-router.patch('/user/resetPasswordWithOtp', requireAppClient, authLoginLimiter, resetUserPasswordWithOtp);
-router.patch('/restaurant/resetPasswordWithOtp', requireAppClient, authLoginLimiter, resetRestaurantPasswordWithOtp);
+router.post('/user/signup', authSignupLimiter, signupUser);
+router.post('/restaurant/signup', authSignupLimiter, signupRestaurant);
+router.post('/delivery/login', authLoginLimiter, loginDelivery);
+router.post('/restaurant/login', authLoginLimiter, loginRestaurant);
+router.post('/user/login', authLoginLimiter, loginUser);
+router.post('/restaurant/verifySignupOtp', otpVerifyLimiter, verifyRestaurantSignupOtp);
+router.post('/user/verifySignupOtp', otpVerifyLimiter, verifyUserSignupOtp);
+router.post('/restaurant/resendSignupOtp', otpResendLimiter, resendRestaurantSignupOtp);
+router.post('/user/resendSignupOtp', otpResendLimiter, resendUserSignupOtp);
+router.post('/user/requestPasswordResetOtp', authLoginLimiter, requestUserPasswordResetOtp);
+router.post('/restaurant/requestPasswordResetOtp', authLoginLimiter, requestRestaurantPasswordResetOtp);
+router.post('/user/verifyPasswordResetOtp', otpVerifyLimiter, verifyUserPasswordResetOtp);
+router.post('/restaurant/verifyPasswordResetOtp', otpVerifyLimiter, verifyRestaurantPasswordResetOtp);
+router.post('/user/resendPasswordResetOtp', otpResendLimiter, resendUserPasswordResetOtp);
+router.post('/restaurant/resendPasswordResetOtp', otpResendLimiter, resendRestaurantPasswordResetOtp);
+router.patch('/user/resetPasswordWithOtp', authLoginLimiter, resetUserPasswordWithOtp);
+router.patch('/restaurant/resetPasswordWithOtp', authLoginLimiter, resetRestaurantPasswordWithOtp);
 router.post('/admin/login', authLoginLimiter, loginAdmin);
 router.post('/admin/verifyLoginOtp', otpVerifyLimiter, verifyAdminLoginOtp);
 router.post('/admin/resendLoginOtp', otpResendLimiter, resendAdminLoginOtp);
 router.get('/logout', logout);
-router.get('/checkToken', requireAppClient, checkToken);
+router.get('/checkToken', checkToken);
 
 
 // Delivery Controller
