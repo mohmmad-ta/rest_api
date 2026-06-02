@@ -142,6 +142,12 @@ const sendLoginOtpWithOtpiq = async (phoneNumber, verificationCode) => {
             }
         );
     } catch (error) {
+        console.error('OTPIQ WhatsApp OTP request failed.', {
+            status: error.response?.status,
+            code: error.code,
+            message: error.message,
+        });
+
         throw new AppError(
             'تعذر إرسال رمز التحقق إلى رقم الهاتف. يرجى التأكد من الرقم والمحاولة مرة أخرى.',
             502,

@@ -38,16 +38,35 @@ const ensureBootstrapAdmin = async ({ userID, phone, password }, source) => {
         return;
     }
 
-    const existingAdmin = await Admin.findOne({ userID }).setOptions({
-        includeInactive: true,
-    });
+    const existingAdmin = await Admin.findOne({ userID })
+        .setOptions({
+            includeInactive: true,
+        })
+        .select("+password");
 
     if (existingAdmin) {
+        let shouldSave = false;
+        let passwordChanged = false;
+
         if (existingAdmin.phone !== phone) {
             existingAdmin.phone = phone;
-            await existingAdmin.save({ validateBeforeSave: false });
-            console.log(`Admin phone updated from ${source}.`);
+            shouldSave = true;
         }
+
+        if (!(await existingAdmin.correctPassword(password, existingAdmin.password))) {
+            existingAdmin.password = password;
+            existingAdmin.passwordConfirm = password;
+            shouldSave = true;
+            passwordChanged = true;
+        }
+
+        if (shouldSave) {
+            await existingAdmin.save({
+                validateBeforeSave: passwordChanged,
+            });
+            console.log(`Admin account ${userID} synchronized from ${source}.`);
+        }
+
         return;
     }
 
