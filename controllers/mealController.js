@@ -103,6 +103,14 @@ const normalizePricedList = (value) =>
         }))
         .filter((item) => item.title || item.price !== 0);
 
+const normalizePositivePricedList = (value) =>
+    parseJsonArrayField(value)
+        .map((item) => ({
+            title: String(item?.title || '').trim(),
+            price: Math.max(0, Number(item?.price || 0)),
+        }))
+        .filter((item) => item.title || item.price !== 0);
+
 const normalizeNotesList = (value) =>
     parseJsonArrayField(value)
         .map((item) => ({
@@ -124,7 +132,7 @@ exports.normalizeMealBody = (req, res, next) => {
     req.body = {
         ...parsedBody,
         tags: normalizePricedList(parsedBody.tags),
-        options: normalizePricedList(parsedBody.options),
+        options: normalizePositivePricedList(parsedBody.options),
         notes: normalizeNotesList(parsedBody.notes),
     };
 

@@ -34,18 +34,23 @@ const getMealTagPrice = (meal, selectedTag) => {
 
 const getMealOptionPrice = (meal, selectedOption) => {
     const selectedTitle = normalizeChoiceTitle(selectedOption?.title);
+    const mealOptions = meal?.options || [];
 
-    if (!selectedTitle) {
+    if (!mealOptions.length) {
         return null;
     }
 
-    const matchedOption = (meal?.options || []).find((option) => normalizeChoiceTitle(option?.title) === selectedTitle);
+    if (!selectedTitle) {
+        return Math.max(0, Number(mealOptions[0]?.price || 0));
+    }
+
+    const matchedOption = mealOptions.find((option) => normalizeChoiceTitle(option?.title) === selectedTitle);
 
     if (!matchedOption) {
         return null;
     }
 
-    return Number(matchedOption.price || 0);
+    return Math.max(0, Number(matchedOption.price || 0));
 };
 
 const orderSchema = new mongoose.Schema(
@@ -207,9 +212,20 @@ orderSchema.pre('save', async function (next) {
             return next(new AppError('هذه الوجبة غير متاحة للطلب حالياً.', 400));
         }
 
-        if (el?.Id?.price) {
-            // Base meal price × count
-            let basePrice = el.Id.price * el.count;
+        if (el?.Id) {
+            const mealOptions = el.Id.options || [];
+            const optionSource = el.option?.title ? el.option : mealOptions[0];
+            const backendOptionPrice = mealOptions.length ? getMealOptionPrice(el.Id, optionSource) : null;
+
+            if (mealOptions.length && backendOptionPrice === null) {
+                return next(new AppError('خيار الوجبة غير صالح.', 400));
+            }
+
+            // If the meal has options, the option price is the base meal price.
+            const mealBasePrice = mealOptions.length
+                ? Number(backendOptionPrice || 0)
+                : Number(el.Id.price || 0);
+            let basePrice = mealBasePrice * el.count;
 
             // Tags price × count
             let tagsPrice = 0;
@@ -228,19 +244,15 @@ orderSchema.pre('save', async function (next) {
                 tagsPrice *= el.count;
             }
 
-            let optionPrice = 0;
-            if (el.option?.title) {
-                const backendOptionPrice = getMealOptionPrice(el.Id, el.option);
-
-                if (backendOptionPrice === null) {
-                    return next(new AppError('خيار الوجبة غير صالح.', 400));
-                }
-
-                el.option.price = backendOptionPrice;
-                optionPrice = backendOptionPrice * el.count;
+            if (mealOptions.length) {
+                const selectedBackendOption = optionSource || mealOptions[0];
+                el.option = {
+                    title: selectedBackendOption?.title,
+                    price: backendOptionPrice,
+                };
             }
 
-            total += basePrice + tagsPrice + optionPrice;
+            total += basePrice + tagsPrice;
         }
     }
 

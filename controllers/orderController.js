@@ -436,7 +436,7 @@ exports.getActiveUserOrders = catchAsync(async (req, res) => {
         userId: req.user.id,
         status: { $ne: '0' },
     })
-        .sort('createdAt')
+        .sort('-createdAt')
         .limit(50);
 
     const enrichedOrders = await attachNeedsRatingToOrders(orders, req.user.id);
