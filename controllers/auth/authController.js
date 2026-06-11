@@ -9,6 +9,7 @@ const {promisify} = require("util");
 const crypto = require("crypto");
 const sendEmail = require("../../utils/email");
 const axios = require('axios');
+const { createInAppNotification } = require('../notificationController');
 
 const LOGIN_OTP_TTL_MINUTES = 10;
 const SIGNUP_OTP_MAX_VERIFY_ATTEMPTS = parseInt(process.env.SIGNUP_OTP_MAX_VERIFY_ATTEMPTS || "5", 10);
@@ -169,6 +170,37 @@ const resetAdminLoginOtpSecurityState = (user) => {
 const resetPasswordResetOtpSecurityState = (user) => {
     user.passwordResetOtpVerifyAttempts = 0;
     user.passwordResetOtpBlockedUntil = undefined;
+};
+
+const FIRST_LOGIN_RESTAURANTS_MESSAGE = 'قريباً سيتم إضافة المزيد من المطاعم لتوفير خيارات أوسع لكم.';
+
+const createFirstLoginUserNotification = async (user) => {
+    if (!user || user.role !== 'user' || user.firstLoginNotificationSent) {
+        return;
+    }
+
+    try {
+        await createInAppNotification({
+            recipientId: user._id,
+            recipientRole: 'user',
+            type: 'first-login-restaurants-coming-soon',
+            title: 'تحديث قريب',
+            titleAr: 'تحديث قريب',
+            message: FIRST_LOGIN_RESTAURANTS_MESSAGE,
+            messageAr: FIRST_LOGIN_RESTAURANTS_MESSAGE,
+            screen: 'notification',
+            data: {
+                type: 'first-login-restaurants-coming-soon',
+            },
+        });
+
+        user.firstLoginNotificationSent = true;
+        await user.save({ validateBeforeSave: false });
+    } catch (error) {
+        console.error('Failed to create first-login user notification:', error?.message || error);
+    } finally {
+        user.firstLoginNotificationSent = undefined;
+    }
 };
 
 const clearPasswordResetOtpState = (user) => {
@@ -444,6 +476,7 @@ const verifySignupOtpForModel = (Model, { activateOnVerify = true, onSuccess } =
         }
 
         await user.save({ validateBeforeSave: false });
+        await createFirstLoginUserNotification(user);
 
         if (onSuccess) {
             return onSuccess(res, user);
@@ -708,6 +741,7 @@ const createSendToken = (user, statusCode, res) => {
     const cookieOptions = buildJwtCookieOptions();
     res.cookie('jwt', token, cookieOptions);
     user.password = undefined;
+    user.firstLoginNotificationSent = undefined;
 
     res.status(statusCode).json({
         status: 'success',
@@ -792,7 +826,7 @@ exports.loginUser = catchAsync(async (req, res, next) => {
     }
     const user = await User.findOne({ phone })
         .setOptions({ includeInactive: true })
-        .select('+password +active +signupOtpCode +signupOtpExpires');
+        .select('+password +active +signupOtpCode +signupOtpExpires +firstLoginNotificationSent');
 
     if (!user || !(await user.correctPassword(password, user.password))) {
         return next(new AppError('رقم الهاتف أو كلمة المرور غير صحيحة!', 401));
@@ -803,6 +837,7 @@ exports.loginUser = catchAsync(async (req, res, next) => {
         return respondWithSignupOtpChallenge(res, user);
     }
 
+    await createFirstLoginUserNotification(user);
     createSendToken(user, 200, res);
 });
 

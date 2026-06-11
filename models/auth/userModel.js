@@ -124,6 +124,11 @@ const userSchema = new mongoose.Schema({
             type: Date,
             select: false
         },
+        firstLoginNotificationSent: {
+            type: Boolean,
+            default: false,
+            select: false
+        },
     },
     {
         toJSON: { virtuals: true },

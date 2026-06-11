@@ -52,11 +52,9 @@ function initWebSocket(server) {
 
     // Parse user ID from query param or JWT token
     const url = new URL(req.url, `http://${req.headers.host}`);
-    console.log(url);
 
     const token = url.searchParams.get('token');
 
-    console.log(token);
     let userId;
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET); // replace with real secret
