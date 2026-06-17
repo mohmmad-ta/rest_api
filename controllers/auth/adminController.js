@@ -6,9 +6,12 @@ const Restaurant = require("../../models/auth/restaurantModel");
 const Order = require("../../models/orderModel");
 const Meal = require("../../models/mealModel");
 const Category = require("../../models/categoryModel");
+const CouponCode = require("../../models/couponCodeModel");
 const AppError = require('../../utils/appError');
 const APIFeatures = require("../../utils/apiFeatures");
 const factory = require('./../handlerFactory');
+const { createInAppNotification } = require('../notificationController');
+const { sendPushToExternalUser } = require('../../utils/oneSignal');
 
 exports.getMeAdmin = async (req, res, next) => {
     req.params.id = req.user.id;
@@ -221,5 +224,117 @@ exports.adminDashboardSummary = catchAsync(async (req, res) => {
                 revenue: row.revenue
             }))
         }
+    });
+});
+
+// ### === CRUD Coupons === ###
+exports.adminCreateCoupon = catchAsync(async (req, res, next) => {
+    const { code, userId, restaurantId, totalAmount, expiresAt } = req.body;
+
+    const [user, restaurant] = await Promise.all([
+        User.findById(userId),
+        Restaurant.findById(restaurantId).setOptions({ includeInactive: true }),
+    ]);
+
+    if (!user) {
+        return next(new AppError('المستخدم غير موجود.', 404));
+    }
+
+    if (!restaurant) {
+        return next(new AppError('المطعم غير موجود.', 404));
+    }
+
+    const coupon = await CouponCode.create({ code, userId, restaurantId, totalAmount, expiresAt });
+
+    await coupon.populate([
+        { path: 'userId', select: 'name phone' },
+        { path: 'restaurantId', select: 'name phone' },
+    ]);
+
+    // Notify the user about their new coupon via OneSignal
+    const restaurantName = coupon.restaurantId?.name || '';
+    const title = 'You have a new discount coupon!';
+    const titleAr = 'لديك كود خصم جديد!';
+    const body = `Use code ${coupon.code} at ${restaurantName} to get a discount on your order.`;
+    const bodyAr = `استخدم الكود ${coupon.code} في مطعم ${restaurantName} للحصول على خصم على طلبك.`;
+    const notificationData = {
+        type: 'coupon-created',
+        code: coupon.code,
+        restaurantId: restaurantId?.toString(),
+        restaurantName,
+        screen: 'notification',
+    };
+
+    Promise.resolve()
+        .then(async () => {
+            await Promise.all([
+                createInAppNotification({
+                    recipientId: userId,
+                    recipientRole: 'user',
+                    type: 'coupon-created',
+                    title,
+                    titleAr,
+                    message: body,
+                    messageAr: bodyAr,
+                    screen: 'notification',
+                    data: notificationData,
+                }),
+                sendPushToExternalUser(`user:${userId}`, {
+                    title,
+                    titleAr,
+                    body,
+                    bodyAr,
+                    data: notificationData,
+                }),
+            ]);
+        })
+        .catch((err) => {
+            console.error('Failed to send coupon notification:', err?.message || err);
+        });
+
+    res.status(201).json({
+        status: 'success',
+        data: coupon,
+    });
+});
+
+exports.adminGetAllCoupons = catchAsync(async (req, res) => {
+    const coupons = await CouponCode.find()
+        .populate('userId', 'name phone')
+        .populate('restaurantId', 'name phone')
+        .sort('-createdAt');
+
+    res.status(200).json({
+        status: 'success',
+        results: coupons.length,
+        data: coupons,
+    });
+});
+
+exports.adminGetCoupon = catchAsync(async (req, res, next) => {
+    const coupon = await CouponCode.findById(req.params.id)
+        .populate('userId', 'name phone')
+        .populate('restaurantId', 'name phone');
+
+    if (!coupon) {
+        return next(new AppError('كود الخصم غير موجود.', 404));
+    }
+
+    res.status(200).json({
+        status: 'success',
+        data: coupon,
+    });
+});
+
+exports.adminDeleteCoupon = catchAsync(async (req, res, next) => {
+    const coupon = await CouponCode.findByIdAndDelete(req.params.id);
+
+    if (!coupon) {
+        return next(new AppError('كود الخصم غير موجود.', 404));
+    }
+
+    res.status(204).json({
+        status: 'success',
+        data: null,
     });
 });

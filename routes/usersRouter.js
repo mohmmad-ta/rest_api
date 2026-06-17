@@ -2,8 +2,9 @@ const {Router} = require('express');
 const {deleteMe, getMe, updateMe} = require('../controllers/auth/userController');
 const { getMeDelivery, updateMeDelivery, deleteMeDelivery, getAllMyDelivery} = require('../controllers/auth/deliveryController');
 const { getMeRestaurant, deleteMeRestaurant, updateMeRestaurant, resizeTourImages, uploadProductPhoto} = require('../controllers/auth/restaurantController');
-const { getMeAdmin, adminDeleteDelivery, adminDeleteRestaurant, adminDeleteUser, adminGetAllDelivery, adminGetAllRestaurant, adminUpdateRestaurant, adminGetAllUsers, adminGetDelivery, adminGetRestaurant, adminUpdateUser, adminUpdateDelivery, adminGetUser, adminDashboardSummary, adminGetAllOrders, adminGetOrder, adminUpdateOrder, adminDeleteOrder, adminGetAllMeals, adminGetMeal, adminCreateMeal, adminUpdateMeal, adminDeleteMeal } = require('../controllers/auth/adminController');
+const { getMeAdmin, adminDeleteDelivery, adminDeleteRestaurant, adminDeleteUser, adminGetAllDelivery, adminGetAllRestaurant, adminUpdateRestaurant, adminGetAllUsers, adminGetDelivery, adminGetRestaurant, adminUpdateUser, adminUpdateDelivery, adminGetUser, adminDashboardSummary, adminGetAllOrders, adminGetOrder, adminUpdateOrder, adminDeleteOrder, adminGetAllMeals, adminGetMeal, adminCreateMeal, adminUpdateMeal, adminDeleteMeal, adminCreateCoupon, adminGetAllCoupons, adminGetCoupon, adminDeleteCoupon } = require('../controllers/auth/adminController');
 const {signupUser, loginAdmin, loginDelivery, loginRestaurant, loginUser, signupDelivery, signupRestaurant, logout, forgotPassword, resetPassword, updatePassword, protect, restrictTo, checkToken, verifyUserSignupOtp, verifyRestaurantSignupOtp, resendUserSignupOtp, resendRestaurantSignupOtp, verifyAdminLoginOtp, resendAdminLoginOtp, requestUserPasswordResetOtp, requestRestaurantPasswordResetOtp, resendUserPasswordResetOtp, resendRestaurantPasswordResetOtp, verifyUserPasswordResetOtp, verifyRestaurantPasswordResetOtp, resetUserPasswordWithOtp, resetRestaurantPasswordWithOtp} = require('../controllers/auth/authController');
+const { generateReferralLink, getMyReferrals } = require('../controllers/referralController');
 const { authLoginLimiter, authSignupLimiter, otpVerifyLimiter, otpResendLimiter } = require('../utils/securityRateLimiters');
 const Admin = require('./../models/auth/adminModel');
 const User = require('./../models/auth/userModel');
@@ -50,6 +51,9 @@ router.get('/user/me', protect(User), restrictTo('user'), getMe);
 router.patch('/user/updateMe', protect(User), restrictTo('user'), updateMe);
 router.delete('/user/deleteMe', protect(User), restrictTo('user'), deleteMe);
 router.patch('/user/updateMyPassword', protect(User), restrictTo('user'), updatePassword);
+router.route('/user/referral')
+    .get(protect(User), restrictTo('user'), getMyReferrals)
+    .post(protect(User), restrictTo('user'), generateReferralLink);
 
 
 // Restaurant Controller
@@ -105,5 +109,15 @@ router
 router
     .route('/admin/meal')
     .post(adminCreateMeal);
+
+router
+    .route('/admin/coupon')
+    .get(adminGetAllCoupons)
+    .post(adminCreateCoupon);
+
+router
+    .route('/admin/coupon/:id')
+    .get(adminGetCoupon)
+    .delete(adminDeleteCoupon);
 
 module.exports = router;

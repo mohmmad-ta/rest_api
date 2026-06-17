@@ -7,6 +7,7 @@ const Delivery = require("../models/auth/deliveryModel");
 const Restaurant = require("../models/auth/restaurantModel");
 const Review = require("../models/reviewModel");
 const RestaurantDailyOrderCounter = require("../models/restaurantDailyOrderCounterModel");
+const CouponCode = require("../models/couponCodeModel");
 const {sendRealtimeOrderToUser, sendNotificationToUser, broadcastOrder} = require("./wsController");
 const MAX_RESTAURANT_ORDER_RADIUS_KM = 10;
 const APP_TIMEZONE = process.env.APP_TIMEZONE || 'Asia/Baghdad';
@@ -145,6 +146,19 @@ const getOrderRestaurantId = (order) =>
     order?.restaurantId ||
     null;
 
+const findValidAdminCoupon = async (code, userId, restaurantId) => {
+    const normalizedCode = String(code || '').trim().toUpperCase();
+    if (!normalizedCode) return null;
+
+    return CouponCode.findOne({
+        code: normalizedCode,
+        userId,
+        restaurantId,
+        remainingAmount: { $gt: 0 },
+        expiresAt: { $gt: new Date() },
+    });
+};
+
 const attachNeedsRatingToOrder = async (order, userId) => {
     if (!order) {
         return null;
@@ -215,31 +229,43 @@ exports.createOrder = catchAsync(async (req, res, next)=>{
         );
     }
 
-    const { couponCode: normalizedRestaurantCouponCode, couponPercentage, couponExpiresAt, isActive: isCouponActive } =
-        getNormalizedRestaurantCouponData(restaurant);
     const normalizedRequestCouponCode = String(req.body?.couponCode || '').trim().toUpperCase();
     let appliedCouponPercentage = 0;
+    let appliedCouponDiscount = 0;
     let couponCode = undefined;
+    let adminCouponDoc = null;
 
     if (normalizedRequestCouponCode) {
-        if (!normalizedRestaurantCouponCode) {
-            return next(new AppError('هذا المطعم لا يملك كود خصم حالياً.', 400));
-        }
+        // Check admin-issued user-specific coupon first
+        adminCouponDoc = await findValidAdminCoupon(normalizedRequestCouponCode, req.user.id, req.body.restaurantId);
 
-        if (normalizedRequestCouponCode !== normalizedRestaurantCouponCode) {
-            return next(new AppError('كود الخصم غير صحيح.', 400));
-        }
+        if (adminCouponDoc) {
+            couponCode = normalizedRequestCouponCode;
+            appliedCouponDiscount = adminCouponDoc.remainingAmount;
+        } else {
+            // Fall back to restaurant coupon
+            const { couponCode: normalizedRestaurantCouponCode, couponPercentage, couponExpiresAt, isActive: isCouponActive } =
+                getNormalizedRestaurantCouponData(restaurant);
 
-        if (!isCouponActive || !couponExpiresAt) {
-            return next(new AppError('كود الخصم منتهي الصلاحية.', 400));
-        }
+            if (!normalizedRestaurantCouponCode) {
+                return next(new AppError('كود الخصم غير صحيح.', 400));
+            }
 
-        if (!Number.isFinite(couponPercentage) || couponPercentage <= 0) {
-            return next(new AppError('نسبة كود الخصم غير صالحة.', 400));
-        }
+            if (normalizedRequestCouponCode !== normalizedRestaurantCouponCode) {
+                return next(new AppError('كود الخصم غير صحيح.', 400));
+            }
 
-        couponCode = normalizedRequestCouponCode;
-        appliedCouponPercentage = couponPercentage;
+            if (!isCouponActive || !couponExpiresAt) {
+                return next(new AppError('كود الخصم منتهي الصلاحية.', 400));
+            }
+
+            if (!Number.isFinite(couponPercentage) || couponPercentage <= 0) {
+                return next(new AppError('نسبة كود الخصم غير صالحة.', 400));
+            }
+
+            couponCode = normalizedRequestCouponCode;
+            appliedCouponPercentage = couponPercentage;
+        }
     }
 
     const restaurantOrderDay = getRestaurantOrderDayKey();
@@ -266,9 +292,17 @@ exports.createOrder = catchAsync(async (req, res, next)=>{
         antherPhone: req.body.antherPhone,
         couponCode,
         couponPercentage: appliedCouponPercentage,
+        couponDiscount: appliedCouponDiscount,
         restaurantOrderDay,
         restaurantOrderNumber: counter.lastNumber,
     });
+
+    if (adminCouponDoc) {
+        // Deduct the actual applied discount (pre-save hook may have capped it)
+        await CouponCode.findByIdAndUpdate(adminCouponDoc._id, {
+            $inc: { remainingAmount: -order.couponDiscount },
+        });
+    }
 
     sendRealtimeOrderToUser(req.user.id, order, "create-order");
     sendRealtimeOrderToUser(req.body.restaurantId, order, "create-order");
@@ -287,6 +321,27 @@ exports.createOrder = catchAsync(async (req, res, next)=>{
 })
 
 exports.checkCouponCode = catchAsync(async (req, res, next) => {
+    const enteredCouponCode = String(req.body?.couponCode || '').trim().toUpperCase();
+
+    if (!enteredCouponCode) {
+        return next(new AppError('يرجى إدخال كود الخصم.', 400));
+    }
+
+    // Check admin-issued user-specific coupon first
+    const adminCoupon = await findValidAdminCoupon(enteredCouponCode, req.user.id, req.body.restaurantId);
+    if (adminCoupon) {
+        return res.status(200).json({
+            status: 'success',
+            data: {
+                valid: true,
+                couponType: 'fixed',
+                couponDiscount: adminCoupon.remainingAmount,
+                couponExpiresAt: adminCoupon.expiresAt,
+            },
+        });
+    }
+
+    // Fall back to restaurant coupon
     const restaurant = await Restaurant.findById(req.body.restaurantId).select(
         'active +couponCode +couponPercentage +couponExpiresAt'
     ).setOptions({ includeInactive: true });
@@ -299,17 +354,11 @@ exports.checkCouponCode = catchAsync(async (req, res, next) => {
         return next(new AppError('هذا المطعم غير مفعل حالياً.', 400));
     }
 
-    const enteredCouponCode = String(req.body?.couponCode || '').trim().toUpperCase();
-
-    if (!enteredCouponCode) {
-        return next(new AppError('يرجى إدخال كود الخصم.', 400));
-    }
-
     const { couponCode, couponPercentage, couponExpiresAt, isActive } =
         getNormalizedRestaurantCouponData(restaurant);
 
     if (!couponCode) {
-        return next(new AppError('هذا المطعم لا يملك كود خصم حالياً.', 400));
+        return next(new AppError('كود الخصم غير صحيح.', 400));
     }
 
     if (enteredCouponCode !== couponCode) {

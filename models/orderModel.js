@@ -139,6 +139,10 @@ const orderSchema = new mongoose.Schema(
             type: Number,
             default: 0
         },
+        couponDiscount: {
+            type: Number,
+            default: 0
+        },
         status: {
             type: String,
             enum: ['0', '1', '2', '3', '4'], // 0=deleted, 1=pending, 2=preparing, 3=on the way, 4=delivered
@@ -192,7 +196,7 @@ orderSchema.pre(/^find/, function(next) {
 
 // Calculate total price before saving
 orderSchema.pre('save', async function (next) {
-    if (!this.isModified('item') && !this.isModified('couponPercentage')) return next();
+    if (!this.isModified('item') && !this.isModified('couponPercentage') && !this.isModified('couponDiscount')) return next();
 
     // Populate meals and restaurant to get price and discount
     await this.populate({
@@ -262,8 +266,16 @@ orderSchema.pre('save', async function (next) {
     const restaurantDiscountAmount = total * restaurantDiscount;
     const totalAfterRestaurantDiscount = total - restaurantDiscountAmount;
 
-    let couponDiscount = Number(this.couponPercentage || 0) / 100;
-    const couponDiscountAmount = totalAfterRestaurantDiscount * couponDiscount;
+    let couponDiscountAmount = 0;
+    if (Number(this.couponDiscount || 0) > 0) {
+        // Fixed-price coupon: cap to order total so price never goes negative
+        const raw = Number(this.couponDiscount);
+        couponDiscountAmount = Math.min(totalAfterRestaurantDiscount, raw);
+        this.couponDiscount = couponDiscountAmount; // store actual applied amount
+    } else {
+        const couponPct = Number(this.couponPercentage || 0) / 100;
+        couponDiscountAmount = totalAfterRestaurantDiscount * couponPct;
+    }
 
     this.serviceFees = SERVICE_FEES;
     this.totalPrice = roundPriceToNearestStep(totalAfterRestaurantDiscount - couponDiscountAmount, 250) + this.serviceFees;
