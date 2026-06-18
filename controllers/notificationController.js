@@ -45,12 +45,13 @@ exports.getMyNotifications = (role) =>
             recipientRole: role,
         };
 
-        const [notifications, total] = await Promise.all([
+        const [notifications, total, unreadCount] = await Promise.all([
             Notification.find(filters)
                 .sort('-createdAt')
                 .skip(skip)
                 .limit(limit),
             Notification.countDocuments(filters),
+            Notification.countDocuments({ ...filters, isRead: false }),
         ]);
 
         const totalPages = Math.max(Math.ceil(total / limit), 1);
@@ -58,6 +59,7 @@ exports.getMyNotifications = (role) =>
         res.status(200).json({
             status: 'success',
             results: notifications.length,
+            unreadCount,
             data: notifications,
             pagination: {
                 page,
