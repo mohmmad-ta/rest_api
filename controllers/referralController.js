@@ -1,5 +1,7 @@
 const crypto = require('crypto');
 const Referral = require('../models/referralModel');
+const ReferralClaim = require('../models/referralClaimModel');
+const AppSetting = require('../models/appSettingModel');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/appError');
 
@@ -25,14 +27,25 @@ const buildReferralCode = () => {
 
 const buildReferralLink = (code) => `${REFERRAL_LINK_BASE_URL}/${code}`;
 
-const createUniqueReferral = async (referrerUserId) => {
+// Return the user's single permanent referral, creating it on first request.
+const getOrCreateReferral = async (referrerUserId) => {
+    const existing = await Referral.findOne({ referrerUserId });
+    if (existing) {
+        return existing;
+    }
+
     for (let attempt = 0; attempt < MAX_GENERATION_ATTEMPTS; attempt += 1) {
         const code = buildReferralCode();
         try {
             // eslint-disable-next-line no-await-in-loop
             return await Referral.create({ referrerUserId, code });
         } catch (error) {
-            // Duplicate code (unique index) -> retry with a fresh code
+            // Another request created it first -> return that one
+            if (error?.code === 11000 && error?.keyPattern?.referrerUserId) {
+                // eslint-disable-next-line no-await-in-loop
+                return Referral.findOne({ referrerUserId });
+            }
+            // Duplicate code -> retry with a fresh code
             if (error?.code === 11000) {
                 continue;
             }
@@ -42,46 +55,60 @@ const createUniqueReferral = async (referrerUserId) => {
     return null;
 };
 
+const serializeClaim = (claim) => ({
+    id: claim._id,
+    restaurant: claim.restaurantId || null,
+    status: claim.status,
+    registeredAt: claim.registeredAt,
+    rewardedAt: claim.rewardedAt,
+    createdAt: claim.createdAt,
+});
+
 // POST /auth/user/referral
-// A user generates a new referral link to send to a restaurant.
+// Returns the user's single permanent referral link (creating it if needed).
 exports.generateReferralLink = catchAsync(async (req, res, next) => {
-    const referral = await createUniqueReferral(req.user.id);
+    const settings = await AppSetting.getSettings();
+
+    if (!settings.referralsEnabled) {
+        return next(new AppError('برنامج الإحالة متوقف حالياً.', 403, {
+            code: 'REFERRALS_DISABLED',
+        }));
+    }
+
+    const referral = await getOrCreateReferral(req.user.id);
 
     if (!referral) {
         return next(new AppError('تعذر إنشاء كود إحالة فريد. يرجى المحاولة مرة أخرى.', 500));
     }
 
-    res.status(201).json({
+    res.status(200).json({
         status: 'success',
         data: {
-            id: referral._id,
             code: referral.code,
             link: buildReferralLink(referral.code),
-            status: referral.status,
             createdAt: referral.createdAt,
         },
     });
 });
 
 // GET /auth/user/referral
-// List the current user's referrals with their statuses.
+// Returns the user's permanent code/link (if any), the list of restaurants that
+// used it, and whether the referral program is enabled.
 exports.getMyReferrals = catchAsync(async (req, res) => {
-    const referrals = await Referral.find({ referrerUserId: req.user.id })
-        .populate('referredRestaurantId', 'name phone')
-        .sort('-createdAt');
+    const [settings, referral, claims] = await Promise.all([
+        AppSetting.getSettings(),
+        Referral.findOne({ referrerUserId: req.user.id }),
+        ReferralClaim.find({ referrerUserId: req.user.id })
+            .populate('restaurantId', 'name phone')
+            .sort('-createdAt'),
+    ]);
 
     res.status(200).json({
         status: 'success',
-        results: referrals.length,
-        data: referrals.map((referral) => ({
-            id: referral._id,
-            code: referral.code,
-            link: buildReferralLink(referral.code),
-            status: referral.status,
-            referredRestaurant: referral.referredRestaurantId || null,
-            registeredAt: referral.registeredAt,
-            rewardedAt: referral.rewardedAt,
-            createdAt: referral.createdAt,
-        })),
+        enabled: settings.referralsEnabled,
+        code: referral?.code || null,
+        link: referral ? buildReferralLink(referral.code) : null,
+        results: claims.length,
+        data: claims.map(serializeClaim),
     });
 });

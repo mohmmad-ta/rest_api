@@ -7,11 +7,13 @@ const Order = require("../../models/orderModel");
 const Meal = require("../../models/mealModel");
 const Category = require("../../models/categoryModel");
 const CouponCode = require("../../models/couponCodeModel");
+const AppSetting = require("../../models/appSettingModel");
 const AppError = require('../../utils/appError');
 const APIFeatures = require("../../utils/apiFeatures");
 const factory = require('./../handlerFactory');
 const { createInAppNotification } = require('../notificationController');
 const { sendPushToExternalUser } = require('../../utils/oneSignal');
+const { finalizeReferralReward } = require('../../utils/referralService');
 
 exports.getMeAdmin = async (req, res, next) => {
     req.params.id = req.user.id;
@@ -99,6 +101,14 @@ exports.adminUpdateRestaurant = catchAsync(async (req, res, next) => {
     }
 
     await user.populate('category', 'name description');
+
+    // If this request activated the restaurant, reward its referrer (if any).
+    // Fire-and-forget + idempotent (only a 'registered' referral is processed).
+    if ((req.body.active === true || req.body.active === 'true') && user.active === true) {
+        finalizeReferralReward(user._id).catch((error) => {
+            console.error('Failed to finalize referral reward:', error?.message || error);
+        });
+    }
 
     res.status(200).json({
         status: 'success',
@@ -336,5 +346,34 @@ exports.adminDeleteCoupon = catchAsync(async (req, res, next) => {
     res.status(204).json({
         status: 'success',
         data: null,
+    });
+});
+
+// ### === Platform Settings === ###
+exports.adminGetSettings = catchAsync(async (req, res) => {
+    const settings = await AppSetting.getSettings();
+
+    res.status(200).json({
+        status: 'success',
+        data: {
+            referralsEnabled: settings.referralsEnabled,
+        },
+    });
+});
+
+exports.adminUpdateSettings = catchAsync(async (req, res) => {
+    const settings = await AppSetting.getSettings();
+
+    if (typeof req.body.referralsEnabled === 'boolean') {
+        settings.referralsEnabled = req.body.referralsEnabled;
+    }
+
+    await settings.save();
+
+    res.status(200).json({
+        status: 'success',
+        data: {
+            referralsEnabled: settings.referralsEnabled,
+        },
     });
 });

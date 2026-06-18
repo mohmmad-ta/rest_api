@@ -10,6 +10,8 @@ const crypto = require("crypto");
 const sendEmail = require("../../utils/email");
 const axios = require('axios');
 const { createInAppNotification } = require('../notificationController');
+const { sendPushToExternalUser } = require('../../utils/oneSignal');
+const { claimReferralAtSignup } = require('../../utils/referralService');
 
 const LOGIN_OTP_TTL_MINUTES = 10;
 const SIGNUP_OTP_MAX_VERIFY_ATTEMPTS = parseInt(process.env.SIGNUP_OTP_MAX_VERIFY_ATTEMPTS || "5", 10);
@@ -173,6 +175,8 @@ const resetPasswordResetOtpSecurityState = (user) => {
 };
 
 const FIRST_LOGIN_RESTAURANTS_MESSAGE = 'قريباً سيتم إضافة المزيد من المطاعم لتوفير خيارات أوسع لكم.';
+// Delay the first-login push so the app can register its OneSignal alias first.
+const FIRST_LOGIN_PUSH_DELAY_MS = parseInt(process.env.FIRST_LOGIN_PUSH_DELAY_MS || '8000', 10);
 
 const createFirstLoginUserNotification = async (user) => {
     if (!user || user.role !== 'user' || user.firstLoginNotificationSent) {
@@ -180,6 +184,8 @@ const createFirstLoginUserNotification = async (user) => {
     }
 
     try {
+        const notificationData = { type: 'first-login-restaurants-coming-soon', screen: 'notification' };
+
         await createInAppNotification({
             recipientId: user._id,
             recipientRole: 'user',
@@ -189,10 +195,24 @@ const createFirstLoginUserNotification = async (user) => {
             message: FIRST_LOGIN_RESTAURANTS_MESSAGE,
             messageAr: FIRST_LOGIN_RESTAURANTS_MESSAGE,
             screen: 'notification',
-            data: {
-                type: 'first-login-restaurants-coming-soon',
-            },
+            data: notificationData,
         });
+
+        // Push via OneSignal. This fires during login, but the app only
+        // registers its OneSignal alias (user:<id>) AFTER it receives the login
+        // response — so we delay the push to let that registration land.
+        const externalId = `user:${user._id}`;
+        setTimeout(() => {
+            sendPushToExternalUser(externalId, {
+                title: 'تحديث قريب',
+                titleAr: 'تحديث قريب',
+                body: FIRST_LOGIN_RESTAURANTS_MESSAGE,
+                bodyAr: FIRST_LOGIN_RESTAURANTS_MESSAGE,
+                data: notificationData,
+            }).catch((error) => {
+                console.error('Failed to push first-login notification:', error?.message || error);
+            });
+        }, FIRST_LOGIN_PUSH_DELAY_MS);
 
         user.firstLoginNotificationSent = true;
         await user.save({ validateBeforeSave: false });
@@ -797,6 +817,16 @@ exports.signupRestaurant = catchAsync(async (req, res, next)=>{
         passwordConfirm: req.body.password,
         location: req.body.location,
     });
+
+    // If the restaurant signed up via a referral link, link it to that referral.
+    if (req.body.referralCode) {
+        try {
+            await claimReferralAtSignup(req.body.referralCode, restaurant._id);
+        } catch (error) {
+            console.error('Failed to claim referral at signup:', error?.message || error);
+        }
+    }
+
     respondWithSignupOtpChallenge(res, restaurant);
 })
 
