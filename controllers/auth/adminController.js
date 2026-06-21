@@ -8,12 +8,12 @@ const Meal = require("../../models/mealModel");
 const Category = require("../../models/categoryModel");
 const CouponCode = require("../../models/couponCodeModel");
 const AppSetting = require("../../models/appSettingModel");
+const ReferralClaim = require("../../models/referralClaimModel");
 const AppError = require('../../utils/appError');
 const APIFeatures = require("../../utils/apiFeatures");
 const factory = require('./../handlerFactory');
 const { createInAppNotification } = require('../notificationController');
 const { sendPushToExternalUser } = require('../../utils/oneSignal');
-const { finalizeReferralReward } = require('../../utils/referralService');
 
 exports.getMeAdmin = async (req, res, next) => {
     req.params.id = req.user.id;
@@ -101,14 +101,6 @@ exports.adminUpdateRestaurant = catchAsync(async (req, res, next) => {
     }
 
     await user.populate('category', 'name description');
-
-    // If this request activated the restaurant, reward its referrer (if any).
-    // Fire-and-forget + idempotent (only a 'registered' referral is processed).
-    if ((req.body.active === true || req.body.active === 'true') && user.active === true) {
-        finalizeReferralReward(user._id).catch((error) => {
-            console.error('Failed to finalize referral reward:', error?.message || error);
-        });
-    }
 
     res.status(200).json({
         status: 'success',
@@ -256,6 +248,20 @@ exports.adminCreateCoupon = catchAsync(async (req, res, next) => {
 
     const coupon = await CouponCode.create({ code, userId, restaurantId, totalAmount, expiresAt });
 
+    await ReferralClaim.findOneAndUpdate(
+        {
+            referrerUserId: userId,
+            restaurantId,
+            status: 'registered',
+        },
+        {
+            status: 'done',
+            rewardCouponId: coupon._id,
+            rewardedAt: new Date(),
+        },
+        { new: true }
+    );
+
     await coupon.populate([
         { path: 'userId', select: 'name phone' },
         { path: 'restaurantId', select: 'name phone' },
@@ -318,6 +324,26 @@ exports.adminGetAllCoupons = catchAsync(async (req, res) => {
         status: 'success',
         results: coupons.length,
         data: coupons,
+    });
+});
+
+// ### === Referral Invites === ###
+exports.adminGetAllReferrals = catchAsync(async (req, res) => {
+    const referrals = await ReferralClaim.find()
+        .populate('referralId', 'code')
+        .populate('referrerUserId', 'name phone')
+        .populate({
+            path: 'restaurantId',
+            select: 'name phone active createdAt',
+            options: { includeInactive: true },
+        })
+        .populate('rewardCouponId', 'code totalAmount remainingAmount expiresAt')
+        .sort('-createdAt');
+
+    res.status(200).json({
+        status: 'success',
+        results: referrals.length,
+        data: referrals,
     });
 });
 
